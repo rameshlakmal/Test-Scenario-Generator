@@ -11,6 +11,8 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const Ajv = require("ajv");
 
+const authRoutes = require("./auth");
+const authMiddleware = require("./authMiddleware");
 const { loadSkills } = require("./skills");
 const { selectSkills } = require("./selectSkills");
 const {
@@ -120,6 +122,12 @@ const validatePreflight = ajv.compile(preflightSchema);
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
 });
+
+// Auth routes (public — no middleware)
+app.use("/api/auth", authRoutes);
+
+// Protect all routes below this line
+app.use("/api", authMiddleware);
 
 app.get("/api/skills", (req, res) => {
   res.json({

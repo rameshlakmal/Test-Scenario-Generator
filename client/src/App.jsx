@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   AppBar,
@@ -21,14 +21,80 @@ import { ThemeProvider, createTheme, styled } from '@mui/material/styles'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import LogoutIcon from '@mui/icons-material/Logout'
 
 import { purpleMain, purpleDeep, bgBase, paperBase, primaryBlack, modelOptions, defaultModel } from './theme'
 
 const API = import.meta.env.VITE_API_URL || ''
+import LoginPage from './LoginPage'
 import StepRequirements from './StepRequirements'
 import StepAnalyze from './StepAnalyze'
 import StepResults from './StepResults'
 import DiagramDialog from './DiagramDialog'
+
+// ─── Auth helpers ───
+
+const AUTH_KEY = 'ai-test-gen:auth'
+
+function loadAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch { return null }
+}
+
+function saveAuth(auth) {
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)) } catch {}
+}
+
+function clearAuth() {
+  try { localStorage.removeItem(AUTH_KEY) } catch {}
+}
+
+/** Fetch wrapper that attaches the Bearer token and handles 401 auto-logout */
+function createAuthFetch(getToken, onUnauthorized) {
+  return async function authFetch(url, opts = {}) {
+    const token = getToken()
+    const headers = { ...(opts.headers || {}) }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    // Don't override Content-Type for FormData (browser sets boundary automatically)
+    const res = await fetch(url, { ...opts, headers })
+
+    if (res.status === 401) {
+      // Try refresh
+      const refreshed = await tryRefreshToken()
+      if (refreshed) {
+        headers['Authorization'] = `Bearer ${refreshed}`
+        return fetch(url, { ...opts, headers })
+      }
+      onUnauthorized()
+    }
+
+    return res
+  }
+
+  async function tryRefreshToken() {
+    const auth = loadAuth()
+    if (!auth || !auth.refreshToken) return null
+    try {
+      const res = await fetch(`${API}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: auth.refreshToken })
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      if (data.accessToken) {
+        const updated = { ...auth, accessToken: data.accessToken }
+        saveAuth(updated)
+        return data.accessToken
+      }
+      return null
+    } catch { return null }
+  }
+}
 
 const AnimatedConnector = styled(StepConnector)(() => ({
   [`&.${stepConnectorClasses.alternativeLabel}`]: {
@@ -117,6 +183,37 @@ const STEPS = ['Requirements', 'Analyze', 'Results']
 
 export default function App() {
   const appLogo = '📝'
+
+  // ─── Auth state ───
+  const [auth, setAuth] = useState(() => loadAuth())
+  const authRef = useRef(auth)
+  useEffect(() => { authRef.current = auth }, [auth])
+
+  function handleLogin(data) {
+    saveAuth(data)
+    setAuth(data)
+  }
+
+  function handleLogout() {
+    const rt = auth && auth.refreshToken
+    if (rt) {
+      fetch(`${API}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: rt })
+      }).catch(() => {})
+    }
+    clearAuth()
+    setAuth(null)
+  }
+
+  const authFetch = useCallback(
+    createAuthFetch(
+      () => authRef.current && authRef.current.accessToken,
+      () => { clearAuth(); setAuth(null) }
+    ),
+    []
+  )
 
   const theme = useMemo(
     () =>
@@ -359,10 +456,10 @@ export default function App() {
 
   // Check Jira configuration on mount
   useEffect(() => {
-    fetch(`${API}/api/jira/status`).then((r) => r.json()).then((d) => {
+    authFetch(`${API}/api/jira/status`).then((r) => r.json()).then((d) => {
       if (d && d.configured) {
         setJiraConfigured(true)
-        fetch(`${API}/api/jira/projects`).then((r) => r.json()).then((p) => {
+        authFetch(`${API}/api/jira/projects`).then((r) => r.json()).then((p) => {
           if (Array.isArray(p.projects)) setJiraProjects(p.projects)
         }).catch(() => {})
       }
@@ -380,10 +477,10 @@ export default function App() {
     setJiraSprintFilter('')
     setJiraStatusFilter('')
 
-    fetch(`${API}/api/jira/epics?project=${encodeURIComponent(jiraProject)}`).then((r) => r.json()).then((d) => {
+    authFetch(`${API}/api/jira/epics?project=${encodeURIComponent(jiraProject)}`).then((r) => r.json()).then((d) => {
       if (Array.isArray(d.epics)) setJiraEpics(d.epics)
     }).catch(() => {})
-    fetch(`${API}/api/jira/sprints?project=${encodeURIComponent(jiraProject)}`).then((r) => r.json()).then((d) => {
+    authFetch(`${API}/api/jira/sprints?project=${encodeURIComponent(jiraProject)}`).then((r) => r.json()).then((d) => {
       if (Array.isArray(d.sprints)) setJiraSprints(d.sprints)
     }).catch(() => {})
   }, [jiraProject])
@@ -396,7 +493,7 @@ export default function App() {
     if (jiraSprintFilter) params.set('sprint', jiraSprintFilter)
     if (jiraStatusFilter) params.set('status', jiraStatusFilter)
     if (jiraSearch.trim()) params.set('search', jiraSearch.trim())
-    fetch(`${API}/api/jira/stories?${params}`).then((r) => r.json()).then((d) => {
+    authFetch(`${API}/api/jira/stories?${params}`).then((r) => r.json()).then((d) => {
       if (Array.isArray(d.stories)) {
         setJiraStories(d.stories)
         setJiraSelectedKeys(new Set())
@@ -409,7 +506,7 @@ export default function App() {
     if (!keys.length) { setError('Select at least one story.'); return }
     setJiraLoading(true)
     try {
-      const res = await fetch(`${API}/api/jira/story-details`, {
+      const res = await authFetch(`${API}/api/jira/story-details`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keys })
@@ -531,7 +628,7 @@ export default function App() {
       const fd = new FormData()
       fd.set('provider', provider); fd.set('model', model); fd.set('requirementText', requirementText)
       if (requirementFile) fd.set('requirementFile', requirementFile)
-      const res = await fetch(`${API}/api/preflight`, { method: 'POST', body: fd, signal: controller.signal })
+      const res = await authFetch(`${API}/api/preflight`, { method: 'POST', body: fd, signal: controller.signal })
       const data = await res.json()
       if (!res.ok) throw new Error((data && data.error) || `Request failed: ${res.status}`)
       setPreflight(data.preflight || null)
@@ -557,7 +654,7 @@ export default function App() {
       const fd = new FormData()
       fd.set('provider', provider); fd.set('model', model); fd.set('requirementText', requirementText)
       if (requirementFile) fd.set('requirementFile', requirementFile)
-      const res = await fetch(`${API}/api/analyze`, { method: 'POST', body: fd, signal: controller.signal })
+      const res = await authFetch(`${API}/api/analyze`, { method: 'POST', body: fd, signal: controller.signal })
       const data = await res.json()
       if (!res.ok) throw new Error((data && data.error) || `Request failed: ${res.status}`)
       const analysisResult = data.analysis || {}
@@ -593,7 +690,7 @@ export default function App() {
       if (analysis && Array.isArray(analysis.extractedElements)) fd.set('analysisContext', JSON.stringify(analysis.extractedElements))
       const clarifications = buildClarifications()
       if (clarifications) fd.set('clarifications', clarifications)
-      const res = await fetch(`${API}/api/generate-tests`, { method: 'POST', body: fd, signal: controller.signal })
+      const res = await authFetch(`${API}/api/generate-tests`, { method: 'POST', body: fd, signal: controller.signal })
       const data = await res.json()
       if (!res.ok) throw new Error((data && data.error) || `Request failed: ${res.status}`)
       setSuite(data.suite || null)
@@ -634,7 +731,7 @@ export default function App() {
         aioToken: aioToken.trim() || undefined,
         includeCoverageTags: aioIncludeTags
       }
-      const res = await fetch(`${API}/api/push-to-aio`, {
+      const res = await authFetch(`${API}/api/push-to-aio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -768,6 +865,16 @@ export default function App() {
     ),
   ]
 
+  // ─── Login gate ───
+  if (!auth) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LoginPage onLogin={handleLogin} />
+      </ThemeProvider>
+    )
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -805,22 +912,42 @@ export default function App() {
               </Box>
             </Box>
 
-            <Button
-              component="a"
-              href={`${API}/api/skills`}
-              target="_blank"
-              rel="noreferrer"
-              variant="outlined"
-              size="small"
-              sx={{
-                borderColor: 'rgba(255,255,255,0.14)',
-                color: 'rgba(255,255,255,0.86)',
-                boxShadow: '0 0 0 1px rgba(167, 139, 250, 0.18)',
-                '&:hover': { borderColor: 'rgba(167, 139, 250, 0.45)', backgroundColor: 'rgba(167, 139, 250, 0.08)' }
-              }}
-            >
-              Loaded skills
-            </Button>
+            <Stack direction="row" spacing={1} alignItems="center">
+              {auth && auth.user && (
+                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.50)', mr: 0.5 }}>
+                  {auth.user.name || auth.user.email}
+                </Typography>
+              )}
+              <Button
+                component="a"
+                href={`${API}/api/skills`}
+                target="_blank"
+                rel="noreferrer"
+                variant="outlined"
+                size="small"
+                sx={{
+                  borderColor: 'rgba(255,255,255,0.14)',
+                  color: 'rgba(255,255,255,0.86)',
+                  boxShadow: '0 0 0 1px rgba(167, 139, 250, 0.18)',
+                  '&:hover': { borderColor: 'rgba(167, 139, 250, 0.45)', backgroundColor: 'rgba(167, 139, 250, 0.08)' }
+                }}
+              >
+                Loaded skills
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<LogoutIcon />}
+                onClick={handleLogout}
+                sx={{
+                  borderColor: 'rgba(255,255,255,0.14)',
+                  color: 'rgba(255,255,255,0.70)',
+                  '&:hover': { borderColor: 'rgba(239,68,68,0.45)', backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444' }
+                }}
+              >
+                Logout
+              </Button>
+            </Stack>
           </Toolbar>
         </AppBar>
 
