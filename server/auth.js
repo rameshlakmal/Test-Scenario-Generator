@@ -170,5 +170,34 @@ router.get("/me", (req, res) => {
   }
 });
 
+// Seed admin user from env vars if no users exist
+function seedAdminUser() {
+  const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || "";
+  const name = process.env.ADMIN_NAME || "Admin";
+
+  if (!email || !password) return;
+
+  const data = loadUsers();
+  if (data.users.length > 0) return; // already has users
+
+  const crypto = require("node:crypto");
+  const id = crypto.randomUUID();
+  const passwordHash = bcrypt.hashSync(password, 12);
+
+  data.users.push({
+    id,
+    email,
+    name: name.trim(),
+    passwordHash,
+    createdAt: new Date().toISOString()
+  });
+
+  saveUsers(data);
+  console.log(`Seeded admin user: ${email}`);
+}
+
+seedAdminUser();
+
 module.exports = router;
 module.exports.JWT_SECRET = JWT_SECRET;
