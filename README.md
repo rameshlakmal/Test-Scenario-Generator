@@ -32,97 +32,190 @@
 
 A skills-driven test case generation platform that uses AI to analyze software requirements and produce structured, high-quality test scenarios. It mirrors how a senior QA engineer thinks — analyze first, then apply the right testing techniques.
 
-<br/>
+---
 
-<div align="center">
+## 3-Step Wizard Flow
 
-### 3-Step Wizard Flow
+```mermaid
+graph LR
+    subgraph step1["<b>1 &nbsp; REQUIREMENTS</b>"]
+        A1["Paste text"]
+        A2["Upload file<br/><i>PDF / DOCX / MD / TXT / HTML</i>"]
+        A3["Import from Jira"]
+        A4["Select AI provider & model"]
+        A5["Clarify <i>(optional)</i>"]
+    end
 
-</div>
+    subgraph step2["<b>2 &nbsp; ANALYZE</b>"]
+        B1["AI analyzes requirement"]
+        B2["Extracts testable elements"]
+        B3["Recommends QA techniques<br/>with confidence scores"]
+        B4["Toggle techniques on/off"]
+        B5["Select diagrams"]
+    end
 
-```
-    ╔══════════════════════╗       ╔══════════════════════╗       ╔══════════════════════╗
-    ║                      ║       ║                      ║       ║                      ║
-    ║   1. REQUIREMENTS    ║ ────► ║     2. ANALYZE       ║ ────► ║     3. RESULTS       ║
-    ║                      ║       ║                      ║       ║                      ║
-    ╠══════════════════════╣       ╠══════════════════════╣       ╠══════════════════════╣
-    ║                      ║       ║                      ║       ║                      ║
-    ║  • Paste text        ║       ║  • AI analyzes req   ║       ║  • Structured test   ║
-    ║  • Upload file       ║       ║  • Extracts testable ║       ║    cases with steps  ║
-    ║    (PDF/DOCX/MD/TXT) ║       ║    elements          ║       ║  • Technique diagrams║
-    ║  • Import from Jira  ║       ║  • Recommends QA     ║       ║  • Filter & search   ║
-    ║  • Select AI provider║       ║    techniques        ║       ║  • Export JSON/CSV   ║
-    ║  • Clarify (optional)║       ║  • Toggle techniques ║       ║  • Push to AIO Tests ║
-    ║                      ║       ║  • Select diagrams   ║       ║                      ║
-    ╚══════════════════════╝       ╚══════════════════════╝       ╚══════════════════════╝
+    subgraph step3["<b>3 &nbsp; RESULTS</b>"]
+        C1["Structured test cases"]
+        C2["Technique diagrams"]
+        C3["Filter & search"]
+        C4["Export JSON / CSV"]
+        C5["Push to AIO Tests"]
+    end
+
+    step1 ==> step2 ==> step3
+
+    style step1 fill:#1e1b4b,stroke:#7c3aed,stroke-width:2px,color:#e9d5ff
+    style step2 fill:#1e1b4b,stroke:#7c3aed,stroke-width:2px,color:#e9d5ff
+    style step3 fill:#1e1b4b,stroke:#7c3aed,stroke-width:2px,color:#e9d5ff
 ```
 
 ---
 
 ## How It Works — The AI Pipeline
 
-The generator uses a multi-stage pipeline with parallel LLM calls for maximum coverage and quality.
+```mermaid
+graph TB
+    INPUT["<b>INPUT</b><br/>Requirements text, file upload,<br/>or Jira user stories"]
 
+    subgraph analyze["<b>STAGE 1 — ANALYZE</b> &nbsp; <code>POST /api/analyze</code>"]
+        direction TB
+        AN1["Extract testable elements<br/><i>inputs, states, rules, boundaries,<br/>constraints, integrations</i>"]
+        AN2["Recommend skills with<br/>confidence scores<br/><i>high / medium / low</i>"]
+        AN3["Assess complexity<br/><i>simple / moderate / complex</i>"]
+        AN1 --> AN2 --> AN3
+    end
+
+    PICK{{"Select & confirm<br/>techniques"}}
+
+    subgraph generate["<b>STAGE 2 — GENERATE</b> &nbsp; <code>POST /api/generate-tests</code>"]
+        direction TB
+        subgraph parallel["Parallel LLM Calls &nbsp; <i>(max 3 concurrent)</i>"]
+            direction LR
+            S1["Boundary Value<br/>Analysis"]
+            S2["State<br/>Transition"]
+            S3["Decision<br/>Tables"]
+            S4["Error<br/>Guessing"]
+            S5["... more<br/>skills"]
+        end
+        MERGE["<b>Merge + Deduplicate</b><br/><i>Weighted Jaccard similarity</i><br/>Title 40% · Steps 40% · Expected 20%<br/>Threshold: 60%"]
+        parallel --> MERGE
+    end
+
+    OUTPUT["<b>FINAL TEST SUITE</b><br/>Deduplicated, renumbered,<br/>tagged test cases"]
+
+    INPUT ==> analyze
+    analyze ==> PICK
+    PICK ==> generate
+    generate ==> OUTPUT
+
+    style INPUT fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe
+    style analyze fill:#1e1b4b,stroke:#7c3aed,stroke-width:2px,color:#e9d5ff
+    style generate fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#dcfce7
+    style PICK fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7
+    style OUTPUT fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe
+    style parallel fill:#166534,stroke:#4ade80,stroke-width:1px,color:#dcfce7
+    style MERGE fill:#14532d,stroke:#4ade80,stroke-width:1px,color:#bbf7d0
+    style S1 fill:#166534,stroke:#86efac,color:#f0fdf4
+    style S2 fill:#166534,stroke:#86efac,color:#f0fdf4
+    style S3 fill:#166534,stroke:#86efac,color:#f0fdf4
+    style S4 fill:#166534,stroke:#86efac,color:#f0fdf4
+    style S5 fill:#166534,stroke:#86efac,color:#f0fdf4
 ```
-  ┌─────────────────────────────────────────────────────────────────────────────────────┐
-  │                              AI TEST GENERATION PIPELINE                             │
-  └─────────────────────────────────────────────────────────────────────────────────────┘
 
-  STAGE 1 — ANALYZE                          STAGE 2 — GENERATE (Parallel)
-  ┌─────────────────────────┐                ┌─────────────────────────────────────────┐
-  │                         │                │                                         │
-  │  POST /api/analyze      │                │  POST /api/generate-tests               │
-  │                         │                │                                         │
-  │  ┌───────────────────┐  │                │  ┌─────────┐ ┌─────────┐ ┌─────────┐   │
-  │  │ Extract testable  │  │                │  │Boundary │ │ State   │ │ Error   │   │
-  │  │ elements (inputs, │  │    ┌──────┐    │  │ Value   │ │Transiti-│ │Guessing │   │
-  │  │ states, rules,    │──┼──►│ Pick │───►│  │Analysis │ │  on     │ │Heurist- │   │
-  │  │ boundaries)       │  │    │Skills│    │  │         │ │         │ │  ics    │   │
-  │  └───────────────────┘  │    └──────┘    │  └────┬────┘ └────┬────┘ └────┬────┘   │
-  │                         │                │       │           │           │         │
-  │  ┌───────────────────┐  │                │       └───────────┼───────────┘         │
-  │  │ Recommend skills  │  │                │                   ▼                     │
-  │  │ with confidence   │  │                │          ┌─────────────────┐             │
-  │  │ (high/med/low)    │  │                │          │  MERGE + DEDUP  │             │
-  │  └───────────────────┘  │                │          │                 │             │
-  │                         │                │          │  Weighted Jaccard│             │
-  │  ┌───────────────────┐  │                │          │  (threshold 60%)│             │
-  │  │ Assess complexity │  │                │          └────────┬────────┘             │
-  │  │ (simple/moderate/ │  │                │                   │                     │
-  │  │  complex)         │  │                │                   ▼                     │
-  │  └───────────────────┘  │                │         ┌──────────────────┐             │
-  │                         │                │         │  FINAL TEST SUITE│             │
-  └─────────────────────────┘                │         └──────────────────┘             │
-                                             └─────────────────────────────────────────┘
+---
 
-  DEDUP WEIGHTS:  Title 40%  ·  Steps 40%  ·  Expected Result 20%
-  CONCURRENCY:    Max 3 parallel LLM calls
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph client["<b>CLIENT</b> &nbsp; React 19 + MUI 6 + Vite"]
+        direction LR
+        UI["Wizard UI<br/><i>3-step stepper</i>"]
+        DIAGRAMS["Mermaid.js<br/><i>Technique diagrams</i>"]
+    end
+
+    subgraph server["<b>SERVER</b> &nbsp; Express 5 + Node.js"]
+        direction TB
+        AUTH["Auth Middleware<br/><i>JWT + Helmet + Rate Limit</i>"]
+        ROUTES["API Routes"]
+        PROMPTS["Prompt Engine<br/><i>Analysis · Per-skill · Preflight</i>"]
+        SKILLS["Skill Loader<br/><i>12 QA playbooks (.md)</i>"]
+        VALIDATOR["Schema Validator<br/><i>Ajv JSON Schema</i>"]
+        UTIL["Merge + Dedup<br/><i>Weighted Jaccard</i>"]
+    end
+
+    subgraph llm["<b>LLM PROVIDERS</b>"]
+        direction LR
+        OPENAI["OpenAI<br/><i>GPT-4.1</i>"]
+        CLAUDE["Anthropic<br/><i>Claude</i>"]
+        GEMINI["Google<br/><i>Gemini</i>"]
+    end
+
+    subgraph integrations["<b>INTEGRATIONS</b>"]
+        direction LR
+        JIRA["Jira Cloud<br/><i>Import stories</i>"]
+        AIO["AIO Tests<br/><i>Export cases</i>"]
+    end
+
+    client <--> AUTH
+    AUTH --> ROUTES
+    ROUTES --> PROMPTS
+    PROMPTS --> SKILLS
+    ROUTES --> VALIDATOR
+    ROUTES --> UTIL
+    PROMPTS <--> llm
+    ROUTES <--> integrations
+
+    style client fill:#1e1b4b,stroke:#7c3aed,stroke-width:2px,color:#e9d5ff
+    style server fill:#0c4a6e,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe
+    style llm fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#dcfce7
+    style integrations fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7
+    style OPENAI fill:#166534,stroke:#86efac,color:#f0fdf4
+    style CLAUDE fill:#166534,stroke:#86efac,color:#f0fdf4
+    style GEMINI fill:#166534,stroke:#86efac,color:#f0fdf4
+    style JIRA fill:#92400e,stroke:#fcd34d,color:#fefce8
+    style AIO fill:#92400e,stroke:#fcd34d,color:#fefce8
 ```
 
 ---
 
 ## Features at a Glance
 
-```
-  ┌──────────────────────────┐  ┌──────────────────────────┐  ┌──────────────────────────┐
-  │  🤖 MULTI-PROVIDER AI    │  │  📋 12 QA SKILL PLAYBOOKS│  │  📊 TECHNIQUE DIAGRAMS   │
-  │                          │  │                          │  │                          │
-  │  Switch between OpenAI,  │  │  Expert-curated markdown │  │  Mermaid.js visuals show │
-  │  Claude, or Gemini from  │  │  guides that teach the   │  │  how each technique      │
-  │  a single dropdown.      │  │  AI how to test.         │  │  applies to your input.  │
-  ├──────────────────────────┤  ├──────────────────────────┤  ├──────────────────────────┤
-  │  🔄 JIRA IMPORT          │  │  ⚡ PARALLEL GENERATION  │  │  🧹 SMART DEDUP          │
-  │                          │  │                          │  │                          │
-  │  Browse projects, epics, │  │  Each skill runs as a    │  │  Weighted Jaccard removes│
-  │  sprints — pull stories  │  │  focused LLM call for    │  │  near-duplicate cases    │
-  │  directly into the tool. │  │  deeper, richer output.  │  │  across techniques.      │
-  ├──────────────────────────┤  ├──────────────────────────┤  ├──────────────────────────┤
-  │  📤 AIO TESTS EXPORT     │  │  📎 FILE UPLOAD          │  │  🔒 SECURE BY DEFAULT    │
-  │                          │  │                          │  │                          │
-  │  Push test cases with    │  │  PDF, DOCX, Markdown,    │  │  JWT auth, Helmet, rate  │
-  │  folders, priorities,    │  │  TXT, HTML — parsed      │  │  limiting, CORS control. │
-  │  and coverage tags.      │  │  server-side.            │  │                          │
-  └──────────────────────────┘  └──────────────────────────┘  └──────────────────────────┘
+```mermaid
+mindmap
+    root(("AI Test<br/>Generator"))
+        **Multi-Provider AI**
+            OpenAI
+            Anthropic Claude
+            Google Gemini
+            Switch from UI dropdown
+        **12 QA Skill Playbooks**
+            Boundary Value Analysis
+            State Transition
+            Decision Tables
+            Equivalence Partitioning
+            Error Guessing
+            Risk-Based Prioritization
+            and 6 more...
+        **Smart Pipeline**
+            Parallel LLM calls
+            Weighted Jaccard dedup
+            Max 3 concurrent
+        **Integrations**
+            Jira import
+            AIO Tests export
+            File upload
+            PDF / DOCX / MD / HTML
+        **Security**
+            JWT Authentication
+            Helmet headers
+            Rate limiting
+            CORS control
+        **Export & Diagrams**
+            JSON export
+            CSV export
+            Mermaid technique diagrams
+            State machines & flowcharts
 ```
 
 ---
@@ -150,17 +243,17 @@ The generator uses a multi-stage pipeline with parallel LLM calls for maximum co
 
 ## Test Depth Modes
 
-Control breadth vs. speed:
+```mermaid
+graph LR
+    SMOKE["<b>SMOKE</b><br/>Max 30 cases<br/><i>Quick sanity · CI gates</i>"]
+    STANDARD["<b>STANDARD</b><br/>Max 120 cases<br/><i>Sprint-level coverage</i>"]
+    DEEP["<b>DEEP</b><br/>Max 220 cases<br/><i>Full regression ·<br/>Compliance audits</i>"]
 
-```
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │                                                                      │
-  │   SMOKE ─────────────── STANDARD ─────────────── DEEP               │
-  │   Max 30 cases          Max 120 cases            Max 220 cases      │
-  │   Quick sanity,         Sprint-level             Full regression,   │
-  │   CI gates              coverage                 compliance audits  │
-  │                                                                      │
-  └──────────────────────────────────────────────────────────────────────┘
+    SMOKE ---|"+"| STANDARD ---|"++"| DEEP
+
+    style SMOKE fill:#422006,stroke:#f59e0b,stroke-width:2px,color:#fef3c7
+    style STANDARD fill:#1e1b4b,stroke:#7c3aed,stroke-width:2px,color:#e9d5ff
+    style DEEP fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#dcfce7
 ```
 
 ---
@@ -362,42 +455,6 @@ test-generator/
 ├── .env.example                    # Environment variable template
 └── package.json
 ```
-
----
-
-## Deployment
-
-<details>
-<summary><strong>Production Build</strong></summary>
-
-```bash
-cd client && npm run build && cp -r dist/* ../web/ && cd ..
-node server/index.js
-```
-
-Everything served from `http://localhost:3001`.
-
-</details>
-
-<details>
-<summary><strong>PM2 (VPS)</strong></summary>
-
-```bash
-npm install -g pm2
-pm2 start server/index.js --name test-generator
-pm2 save && pm2 startup
-```
-
-</details>
-
-<details>
-<summary><strong>Cloud Platforms (Railway, Render, Fly.io)</strong></summary>
-
-- **Build:** `cd client && npm install && npm run build && cp -r dist/* ../web/ && cd .. && npm install`
-- **Start:** `node server/index.js`
-- **Env vars:** Set via platform dashboard
-
-</details>
 
 ---
 
