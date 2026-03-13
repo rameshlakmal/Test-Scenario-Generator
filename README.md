@@ -40,8 +40,9 @@ The UI is built as a 3-step wizard with a dark theme and purple accent, featurin
 
 ## 3-Step Wizard Flow
 
-<!-- Replace with Eraser.io generated diagram -->
-<!-- DIAGRAM: 3-step-wizard-flow -->
+The user moves through three stages in a guided wizard. Each step builds on the previous — input your requirements, let the AI analyze and recommend techniques, then review the generated test cases.
+
+<p align="center"><img src="docs/Diagram-1.png" alt="3-Step Wizard Flow" width="850"/></p>
 
 | Step | Name | What Happens |
 |------|------|-------------|
@@ -53,8 +54,9 @@ The UI is built as a 3-step wizard with a dark theme and purple accent, featurin
 
 ## How It Works — The AI Pipeline
 
-<!-- Replace with Eraser.io generated diagram -->
-<!-- DIAGRAM: ai-pipeline -->
+The pipeline has two AI stages separated by a user review step. The Analysis stage extracts what to test, and the Generation stage produces the actual test cases in parallel — one LLM call per selected technique — then merges and deduplicates the results.
+
+<p align="center"><img src="docs/Diagram-2.png" alt="AI Pipeline" width="600"/></p>
 
 **Stage 1 — Analyze** (`POST /api/analyze`)
 1. Extract testable elements (inputs, states, rules, boundaries, constraints, integrations)
@@ -74,60 +76,30 @@ The UI is built as a 3-step wizard with a dark theme and purple accent, featurin
 
 ## Architecture Overview
 
-<!-- Replace with Eraser.io generated diagram -->
-<!-- DIAGRAM: architecture -->
+Four layers make up the system: the React client talks to the Express server over REST, the server fans out to one of three LLM providers for AI generation, and two external integrations handle Jira import and AIO export.
+
+<p align="center"><img src="docs/Diagram-3.png" alt="Architecture Overview" width="800"/></p>
 
 | Layer | Components |
 |-------|-----------|
 | **Client** | React 19 + MUI 6 + Vite &mdash; 3-step wizard (StepRequirements, StepAnalyze, StepResults), Mermaid.js diagrams, dark theme |
-| **Server** | Express 5 + Node.js &mdash; Auth (JWT + Helmet + Rate Limit), Prompt Engine, Skill Loader, Schema Validator (Ajv), Merge + Dedup |
-| **LLM Providers** | OpenAI (GPT-4.1), Anthropic (Claude), Google (Gemini) &mdash; switchable from UI |
-| **Integrations** | Jira Cloud (import stories), AIO Tests (export cases) &mdash; server-configured or user-provided credentials |
+| **Server** | Express 5 + Node.js &mdash; Prompt Engine, Skill Loader (12 .md playbooks), API Routes, Schema Validator (Ajv), Merge + Dedup, Auth Middleware |
+| **AI Providers** | OpenAI (GPT-4.1), Anthropic (Claude), Google Gemini &mdash; switchable from UI dropdown |
+| **Integrations** | Jira Cloud (import projects/stories), AIO Tests (export cases with folders/tags) &mdash; server-configured or user-provided credentials |
 
 ---
 
 ## Features at a Glance
 
-<!-- Replace with Eraser.io generated diagram -->
-<!-- DIAGRAM: features-mindmap -->
-
-### Multi-Provider AI
-- OpenAI, Anthropic Claude, Google Gemini
-- Switch from UI dropdown, auto-detect from API key prefix
-- Server-configured keys auto-collapse the provider panel
-
-### 12 QA Skill Playbooks
-- Boundary Value Analysis, State Transition, Decision Tables, Equivalence Partitioning
-- Error Guessing, Risk-Based Prioritization, Requirements Traceability
-- Feature Decomposition, Functional Core, Non-Functional Baseline, Pairwise/Combinatorial
-- General Fallback (always included as baseline)
-
-### Smart Pipeline
-- Parallel LLM calls (max 3 concurrent)
-- Weighted Jaccard deduplication
-- Confidence-grouped technique recommendations
-
-### Modern UI/UX
-- Single-card layout with collapsible sections across all stages
-- Bordered accordion bars with chevron + hover states for clear expandability
-- Inline success/error alerts for Jira connection and AIO push
-- Drag-drop overlay on textarea, live word count, file type chips
-- Color-coded priority chips (P0 red, P1 amber, P2 blue, P3 gray)
-- Summary stats bar with priority and type breakdown
-
-### Integrations
-- Jira Cloud import (projects, epics, sprints, stories)
-- AIO Tests export with folder hierarchies, priority mapping, coverage tags
-- User-provided credentials when not server-configured (Base URL + Token fields)
-
-### Export & Diagrams
-- PDF export (landscape, color-coded priorities)
-- CSV export
-- Optional Mermaid technique diagrams (state machines, flowcharts, mindmaps)
-
-### Security
-- JWT Authentication with admin seed from env vars
-- Helmet headers, rate limiting, CORS control
+| Category | Highlights |
+|----------|-----------|
+| **Multi-Provider AI** | OpenAI, Anthropic Claude, Google Gemini &mdash; switch from dropdown, auto-detect from key prefix, server keys auto-collapse the config panel |
+| **12 QA Skill Playbooks** | Boundary Value, State Transition, Decision Tables, Equivalence Partitioning, Error Guessing, Risk-Based, Traceability, Feature Decomposition, Functional Core, Non-Functional, Pairwise, General Fallback |
+| **Smart Pipeline** | Parallel LLM calls (max 3), weighted Jaccard dedup, confidence-grouped recommendations |
+| **Modern UI/UX** | Single-card layout, collapsible accordion panels with chevron + hover, inline success/error alerts, drag-drop overlay, live word count, color-coded priority chips, summary stats bar |
+| **Integrations** | Jira Cloud import (projects/epics/sprints/stories), AIO Tests export (folders/priorities/tags), user-provided credentials fallback |
+| **Export** | PDF (landscape, color-coded), CSV, optional Mermaid technique diagrams |
+| **Security** | JWT auth, Helmet headers, rate limiting, CORS control |
 
 ---
 
