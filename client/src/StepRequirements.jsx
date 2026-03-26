@@ -35,6 +35,9 @@ export default function StepRequirements({
   isSmDown,
   provider, setProvider,
   model, setModel,
+  artifactMode, setArtifactMode,
+  documentType, setDocumentType,
+  testPlanContext, setTestPlanContext,
   apiKey, setApiKey,
   apiKeyValidated, setApiKeyValidated,
   apiKeyModels, setApiKeyModels,
@@ -237,6 +240,101 @@ export default function StepRequirements({
       }}
     >
       <CardContent sx={{ p: '0 !important' }}>
+
+        <Box sx={{ px: 0, pt: 0, pb: 1 }}>
+          <Stack spacing={0}>
+            <Tabs
+              value={artifactMode}
+              onChange={(_, value) => setArtifactMode(value)}
+              variant="fullWidth"
+              sx={{
+                minHeight: 42,
+                borderRadius: '12px 12px 0 0',
+                p: 0.5,
+                backgroundColor: purpleBgFaint,
+                border: '1px solid',
+                borderColor: purpleBorder,
+                mb: artifactMode === 'document' ? 4 : 2.5,
+                '& .MuiTabs-indicator': { display: 'none' },
+                '& .MuiTab-root': {
+                  minHeight: 38,
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontSize: '0.86rem',
+                  fontWeight: 600,
+                  color: 'text.secondary',
+                  transition: 'all 180ms ease',
+                },
+                '& .Mui-selected': {
+                  color: '#fff !important',
+                  background: `linear-gradient(135deg, ${purple[500]}, ${purple[700]})`,
+                  boxShadow: `0 6px 18px ${isDark ? 'rgba(0,0,0,0.28)' : 'rgba(124,58,237,0.18)'}`,
+                },
+              }}
+            >
+              <Tab value="tests" label="Test Scenarios" />
+              <Tab value="document" label="QA Document" />
+            </Tabs>
+            {artifactMode === 'document' && (
+              <Box sx={{ px: 3, mb: 1.5 }}>
+                <FormControl size="small" sx={{ maxWidth: 320, width: '100%' }}>
+                  <InputLabel>Document Type</InputLabel>
+                  <Select
+                    value={documentType}
+                    label="Document Type"
+                    onChange={(e) => setDocumentType(e.target.value)}
+                  >
+                    <MenuItem value="rtm">Requirements Traceability Matrix</MenuItem>
+                    <MenuItem value="coverage-gap-analysis">Coverage Gap Analysis</MenuItem>
+                    <MenuItem value="acceptance-criteria-breakdown">Acceptance Criteria Breakdown</MenuItem>
+                    <MenuItem value="test-plan-draft">Test Plan Draft</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
+            {artifactMode === 'document' && documentType === 'test-plan-draft' && (
+              <Box sx={{ px: 3, pb: 1 }}>
+                <Grid container spacing={1.5}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField size="small" fullWidth label="Sprint Name" value={testPlanContext.sprintName} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, sprintName: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField size="small" fullWidth label="Author" value={testPlanContext.author} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, author: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField size="small" fullWidth label="Testers" placeholder="Ramesh, Nimesha" value={testPlanContext.testers} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, testers: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField size="small" fullWidth label="Developers" placeholder="Greshan, Jayamini" value={testPlanContext.developers} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, developers: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField size="small" fullWidth label="Test Environment" value={testPlanContext.testEnvironment} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, testEnvironment: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField size="small" fullWidth label="Tools" placeholder="Jira, Storybook, Postman" value={testPlanContext.tools} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, tools: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField size="small" fullWidth label="Timescales" value={testPlanContext.timescales} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, timescales: e.target.value }))} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField size="small" fullWidth label="Out of Scope Notes" value={testPlanContext.outOfScopeNotes} onChange={(e) => setTestPlanContext((prev) => ({ ...prev, outOfScopeNotes: e.target.value }))} />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.82rem', px: 3 }}>
+              {artifactMode === 'tests'
+                ? 'Generate analyzed test scenarios using recommended QA techniques.'
+                : documentType === 'rtm'
+                  ? 'Generate a requirements traceability matrix from the requirement and any clarifications you provide.'
+                  : documentType === 'coverage-gap-analysis'
+                    ? 'Generate a requirement-driven coverage gap analysis that highlights ambiguity, missing validation detail, weak testability, and likely blind spots.'
+                    : documentType === 'acceptance-criteria-breakdown'
+                      ? 'Generate an atomic acceptance criteria breakdown that converts broad requirements into clear, testable criteria.'
+                      : 'Generate a compact test plan draft using the uploaded requirement plus the sprint context you provide.'}
+            </Typography>
+          </Stack>
+        </Box>
 
         {/* ─── Section 1: Collapsible AI Provider ─── */}
         <Box

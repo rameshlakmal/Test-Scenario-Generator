@@ -187,6 +187,18 @@ export default function App() {
   const [provider, setProvider] = useState('openai')
   const depth = 'deep'
   const [model, setModel] = useState('gpt-4.1')
+  const [artifactMode, setArtifactMode] = useState('tests')
+  const [documentType, setDocumentType] = useState('rtm')
+  const [testPlanContext, setTestPlanContext] = useState({
+    sprintName: '',
+    author: '',
+    testers: '',
+    developers: '',
+    testEnvironment: '',
+    tools: '',
+    timescales: '',
+    outOfScopeNotes: '',
+  })
 
   // Requirements
   const [requirementText, setRequirementText] = useState('')
@@ -223,6 +235,8 @@ export default function App() {
   const [suiteMeta, setSuiteMeta] = useState(null)
   const [suite, setSuite] = useState(null)
   const [selectedSkills, setSelectedSkills] = useState([])
+  const [documentResult, setDocumentResult] = useState(null)
+  const [documentMeta, setDocumentMeta] = useState(null)
 
   // Analysis
   const [analysis, setAnalysis] = useState(null)
@@ -384,6 +398,9 @@ export default function App() {
       if (!raw) return
       const saved = JSON.parse(raw)
       if (saved && typeof saved.provider === 'string') setProvider(saved.provider)
+      if (saved && (saved.artifactMode === 'tests' || saved.artifactMode === 'document')) setArtifactMode(saved.artifactMode)
+      if (saved && (saved.documentType === 'rtm' || saved.documentType === 'coverage-gap-analysis' || saved.documentType === 'acceptance-criteria-breakdown' || saved.documentType === 'test-plan-draft')) setDocumentType(saved.documentType)
+      if (saved && saved.testPlanContext && typeof saved.testPlanContext === 'object') setTestPlanContext((prev) => ({ ...prev, ...saved.testPlanContext }))
       const p = (saved && saved.provider) || 'openai'
       const validModels = (modelOptions[p] || []).map((m) => m.value)
       if (saved && typeof saved.model === 'string' && validModels.includes(saved.model)) {
@@ -401,13 +418,34 @@ export default function App() {
 
   useEffect(() => {
     const key = 'ai-test-generator:v1'
-    const payload = { provider, model, requirementText, answersByQuestion, aioProject, aioFolder, aioIncludeTags }
+    const payload = { provider, model, artifactMode, documentType, testPlanContext, requirementText, answersByQuestion, aioProject, aioFolder, aioIncludeTags }
     try { localStorage.setItem(key, JSON.stringify(payload)) } catch {}
-  }, [provider, model, requirementText, answersByQuestion, aioProject, aioFolder, aioIncludeTags])
+  }, [provider, model, artifactMode, documentType, testPlanContext, requirementText, answersByQuestion, aioProject, aioFolder, aioIncludeTags])
 
   useEffect(() => {
     return () => cancelInFlight()
   }, [])
+
+  useEffect(() => {
+    setStatus('')
+    if (artifactMode === 'document') {
+      setAnalysis(null)
+      setAnalysisMeta(null)
+      setSelectedTechniques({})
+      setSelectedDiagrams({})
+      setSuite(null)
+      setSuiteMeta(null)
+      setSelectedSkills([])
+      setDuplicateGroups([])
+      setSkillDiagrams([])
+      setSearch('')
+      setFilterType('')
+      setFilterPriority('')
+    } else {
+      setDocumentResult(null)
+      setDocumentMeta(null)
+    }
+  }, [artifactMode])
 
   function setInfo(msg) { setStatus(String(msg || '')); setStatusSeverity('info') }
   function setError(msg) { setStatus(String(msg || '')); setStatusSeverity('error') }
@@ -439,6 +477,7 @@ export default function App() {
     setInfo('Analyzing requirements and preparing questions...')
     setPreflight(null); setPreflightSkills([]); setAnswersByQuestion({})
     setSuite(null); setSelectedSkills([]); setSuiteMeta(null); setAioResult('')
+    setDocumentResult(null); setDocumentMeta(null)
     try {
       try { preflightAbortRef.current && preflightAbortRef.current.abort() } catch {}
       const controller = new AbortController()
@@ -465,6 +504,7 @@ export default function App() {
     setInfo('Analyzing requirement to recommend test techniques...')
     setAnalysis(null); setAnalysisMeta(null); setSelectedTechniques({})
     setSuite(null); setSuiteMeta(null); setSelectedSkills([]); setDuplicateGroups([]); setAioResult('')
+    setDocumentResult(null); setDocumentMeta(null)
     try {
       try { analyzeAbortRef.current && analyzeAbortRef.current.abort() } catch {}
       const controller = new AbortController()
@@ -523,6 +563,68 @@ export default function App() {
       if (dupCount > 0) msg += ` ${dupCount} duplicate(s) removed.`
       if (errors.length > 0) msg += ` ${errors.length} skill(s) had errors.`
       setSuccess(msg)
+      goToStep(2)
+    } catch (err) {
+      if (err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('aborted'))) { setInfo('Cancelled.') }
+      else { setError(err && err.message ? err.message : String(err)) }
+    } finally { generateAbortRef.current = null; setBusy(false) }
+  }
+
+  async function callGenerateDocument() {
+    if (!hasAnyRequirements) { setError('Add requirements first (file or text).'); return }
+    setBusy(true)
+    const documentLabel = documentType === 'rtm'
+      ? 'requirements traceability matrix'
+      : documentType === 'coverage-gap-analysis'
+        ? 'coverage gap analysis'
+        : documentType === 'acceptance-criteria-breakdown'
+          ? 'acceptance criteria breakdown'
+          : 'test plan draft'
+    setInfo(`Generating ${documentLabel}...`)
+    setSuite(null); setSuiteMeta(null); setSelectedSkills([]); setDuplicateGroups([]); setSkillDiagrams([]); setAioResult('')
+    setDocumentResult(null); setDocumentMeta(null)
+    try {
+      try { generateAbortRef.current && generateAbortRef.current.abort() } catch {}
+      const controller = new AbortController()
+      generateAbortRef.current = controller
+      const fd = new FormData()
+      fd.set('provider', provider); fd.set('model', model); fd.set('requirementText', requirementText)
+      fd.set('documentType', documentType)
+      if (documentType === 'test-plan-draft') {
+        const contextLines = [
+          `Sprint Name: ${testPlanContext.sprintName || 'Current Sprint'}`,
+          `Author: ${testPlanContext.author || 'Unspecified Author'}`,
+          `Testers: ${testPlanContext.testers || 'TBD'}`,
+          `Developers: ${testPlanContext.developers || 'TBD'}`,
+          `Test Environment: ${testPlanContext.testEnvironment || 'TBD'}`,
+          `Tools: ${testPlanContext.tools || 'TBD'}`,
+          `Timescales: ${testPlanContext.timescales || 'TBD'}`,
+          `Out of Scope Notes: ${testPlanContext.outOfScopeNotes || 'Not specified'}`,
+        ].join('\n')
+        fd.set('documentContext', contextLines)
+      }
+      if (requirementFile) fd.set('requirementFile', requirementFile)
+      const clarifications = buildClarifications()
+      if (clarifications) fd.set('clarifications', clarifications)
+      const res = await apiFetch(`${API}/api/generate-document`, { method: 'POST', body: fd, signal: controller.signal })
+      const data = await res.json()
+      if (!res.ok) throw new Error((data && data.error) || `Request failed: ${res.status}`)
+      const document = data.document || null
+      setDocumentResult(document)
+      setDocumentMeta({ provider: data.provider, model: data.model, repaired: Boolean(data.repaired), documentType: data.documentType || documentType })
+      const batchCount = Number(data.batchCount || 1)
+      const reqCount = document && Array.isArray(document.requirementItems) ? document.requirementItems.length : 0
+      const detailCount = data.documentType === 'rtm'
+        ? (document && Array.isArray(document.traceRows) ? document.traceRows.length : 0)
+        : data.documentType === 'coverage-gap-analysis'
+          ? (document && Array.isArray(document.gapRows) ? document.gapRows.length : 0)
+          : data.documentType === 'acceptance-criteria-breakdown'
+            ? (document && Array.isArray(document.criteriaRows) ? document.criteriaRows.length : 0)
+            : (document && Array.isArray(document.featureRows) ? document.featureRows.length : 0)
+      const detailLabel = data.documentType === 'rtm' ? 'trace row(s)' : data.documentType === 'coverage-gap-analysis' ? 'gap row(s)' : data.documentType === 'acceptance-criteria-breakdown' ? 'criteria row(s)' : 'feature row(s)'
+      const titleLabel = data.documentType === 'rtm' ? 'RTM' : data.documentType === 'coverage-gap-analysis' ? 'Coverage Gap Analysis' : data.documentType === 'acceptance-criteria-breakdown' ? 'Acceptance Criteria Breakdown' : 'Test Plan Draft'
+      const batchSuffix = batchCount > 1 ? ` Processed in ${batchCount} batches.` : ''
+      setSuccess(`Done. Generated ${titleLabel} with ${reqCount} requirement item(s) and ${detailCount} ${detailLabel}.${batchSuffix}`)
       goToStep(2)
     } catch (err) {
       if (err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('aborted'))) { setInfo('Cancelled.') }
@@ -597,6 +699,7 @@ export default function App() {
     setPreflight(null); setPreflightSkills([]); setAnswersByQuestion({})
     setAnalysis(null); setAnalysisMeta(null); setSelectedTechniques({}); setSelectedDiagrams({})
     setSuite(null); setSuiteMeta(null); setSelectedSkills([]); setDuplicateGroups([]); setSkillDiagrams([])
+    setDocumentResult(null); setDocumentMeta(null)
     setAioResult(''); setStatus(''); setSearch(''); setFilterType(''); setFilterPriority('')
     goToStep(0)
   }
@@ -606,13 +709,13 @@ export default function App() {
 
   const stepCompleted = {
     0: hasAnyRequirements && Boolean(provider && model) && hasApiKey,
-    1: Boolean(analysis) || Boolean(suite),
-    2: Boolean(suite)
+    1: artifactMode === 'tests' ? (Boolean(analysis) || Boolean(suite)) : Boolean(documentResult),
+    2: Boolean(suite) || Boolean(documentResult)
   }
 
   const canGoNext = () => {
     if (activeStep === 0) return hasAnyRequirements && Boolean(provider && model) && hasApiKey
-    if (activeStep === 1) return Boolean(analysis) || Boolean(suite)
+    if (activeStep === 1) return artifactMode === 'tests' ? (Boolean(analysis) || Boolean(suite)) : Boolean(documentResult)
     return false
   }
 
@@ -622,6 +725,9 @@ export default function App() {
         theme={theme} isSmDown={isSmDown}
         provider={provider} setProvider={setProvider}
         model={model} setModel={setModel}
+        artifactMode={artifactMode} setArtifactMode={setArtifactMode}
+        documentType={documentType} setDocumentType={setDocumentType}
+        testPlanContext={testPlanContext} setTestPlanContext={setTestPlanContext}
         apiKey={apiKey} setApiKey={setApiKey}
         apiKeyValidated={apiKeyValidated} setApiKeyValidated={setApiKeyValidated}
         apiKeyModels={apiKeyModels} setApiKeyModels={setApiKeyModels}
@@ -657,6 +763,8 @@ export default function App() {
         theme={theme}
         busy={busy}
         hasAnyRequirements={hasAnyRequirements}
+        artifactMode={artifactMode}
+        documentType={documentType}
         preflight={preflight} answersByQuestion={answersByQuestion} setAnswersByQuestion={setAnswersByQuestion}
         preflightSkills={preflightSkills}
         callPreflight={callPreflight}
@@ -666,6 +774,7 @@ export default function App() {
         jiraImportedCount={jiraImportedCount}
         callAnalyze={callAnalyze}
         callGenerateFromAnalysis={callGenerateFromAnalysis}
+        callGenerateDocument={callGenerateDocument}
         cancelInFlight={cancelInFlight}
         setInfo={setInfo}
         setAnalysis={setAnalysis} setAnalysisMeta={setAnalysisMeta}
@@ -674,7 +783,10 @@ export default function App() {
     () => (
       <StepResults
         theme={theme} isSmDown={isSmDown}
+        artifactMode={artifactMode}
+        documentType={documentType}
         suite={suite} suiteMeta={suiteMeta} selectedSkills={selectedSkills}
+        documentResult={documentResult} documentMeta={documentMeta}
         duplicateGroups={duplicateGroups}
         skillDiagrams={skillDiagrams}
         search={search} setSearch={setSearch}
@@ -823,7 +935,7 @@ export default function App() {
         </AppBar>
 
         {/* ─── Main Content ─── */}
-        <Container maxWidth={false} sx={{ pt: 10, pb: 3, px: { xs: 2, sm: 4, md: 8 } }}>
+        <Container maxWidth={false} sx={{ pt: { xs: 12, sm: 13 }, pb: 3, px: { xs: 2, sm: 4, md: 8 } }}>
           <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
 
             {/* ─── Segmented Progress Stepper ─── */}
@@ -946,7 +1058,7 @@ export default function App() {
               </Stack>
 
               <Stack direction="row" spacing={1}>
-                {activeStep === 2 && suite && (
+                {activeStep === 2 && (suite || documentResult) && (
                   <Button
                     variant="text"
                     startIcon={<RestartAltIcon />}

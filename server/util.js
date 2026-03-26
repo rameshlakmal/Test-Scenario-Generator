@@ -94,6 +94,176 @@ function normalizePreflightCandidate(obj) {
   };
 }
 
+function normalizeRtmCandidate(obj) {
+  const documentTitle = coerceString(obj && obj.documentTitle).trim();
+  const projectName = coerceString(obj && obj.projectName).trim();
+  const sourceSummary = coerceString(obj && obj.sourceSummary).trim();
+  const assumptions = normalizeStringArray(obj && obj.assumptions, { maxItems: 200, maxLen: 240 });
+  const risks = normalizeStringArray(obj && obj.risks, { maxItems: 200, maxLen: 240 });
+  const missingInfoQuestions = normalizeStringArray(obj && obj.missingInfoQuestions, { maxItems: 200, maxLen: 240 });
+
+  const requirementItems = [];
+  for (const item of Array.isArray(obj && obj.requirementItems) ? obj.requirementItems : []) {
+    requirementItems.push({
+      requirementId: coerceString(item && item.requirementId).trim(),
+      requirementText: coerceString(item && item.requirementText).trim(),
+      category: coerceString(item && item.category).trim(),
+      priority: coerceString(item && item.priority).trim(),
+      requirementSource: coerceString(item && item.requirementSource).trim(),
+      acceptanceNotes: normalizeStringArray(item && item.acceptanceNotes, { maxItems: 20, maxLen: 240 })
+    });
+  }
+
+  const traceRows = [];
+  for (const row of Array.isArray(obj && obj.traceRows) ? obj.traceRows : []) {
+    traceRows.push({
+      traceId: coerceString(row && row.traceId).trim(),
+      requirementId: coerceString(row && row.requirementId).trim(),
+      coverageStatus: coerceString(row && row.coverageStatus).trim(),
+      testCaseRefs: normalizeStringArray(row && row.testCaseRefs, { maxItems: 20, maxLen: 120 }),
+      proposedTestConditions: normalizeStringArray(row && row.proposedTestConditions, { maxItems: 20, maxLen: 260 }),
+      testLevel: coerceString(row && row.testLevel).trim(),
+      owner: coerceString(row && row.owner).trim(),
+      notes: normalizeStringArray(row && row.notes, { maxItems: 20, maxLen: 240 })
+    });
+  }
+
+  return {
+    documentTitle,
+    projectName,
+    sourceSummary,
+    assumptions,
+    risks,
+    missingInfoQuestions,
+    requirementItems,
+    traceRows
+  };
+}
+
+function normalizeCoverageGapCandidate(obj) {
+  const documentTitle = coerceString(obj && obj.documentTitle).trim();
+  const projectName = coerceString(obj && obj.projectName).trim();
+  const sourceSummary = coerceString(obj && obj.sourceSummary).trim();
+  const assumptions = normalizeStringArray(obj && obj.assumptions, { maxItems: 200, maxLen: 240 });
+  const risks = normalizeStringArray(obj && obj.risks, { maxItems: 200, maxLen: 240 });
+  const missingInfoQuestions = normalizeStringArray(obj && obj.missingInfoQuestions, { maxItems: 200, maxLen: 240 });
+
+  const requirementItems = [];
+  for (const item of Array.isArray(obj && obj.requirementItems) ? obj.requirementItems : []) {
+    requirementItems.push({
+      requirementId: coerceString(item && item.requirementId).trim(),
+      requirementText: coerceString(item && item.requirementText).trim(),
+      category: coerceString(item && item.category).trim(),
+      priority: coerceString(item && item.priority).trim(),
+      requirementSource: coerceString(item && item.requirementSource).trim(),
+      acceptanceNotes: normalizeStringArray(item && item.acceptanceNotes, { maxItems: 20, maxLen: 240 })
+    });
+  }
+
+  const gapRows = [];
+  for (const row of Array.isArray(obj && obj.gapRows) ? obj.gapRows : []) {
+    gapRows.push({
+      gapId: coerceString(row && row.gapId).trim(),
+      requirementId: coerceString(row && row.requirementId).trim(),
+      gapStatus: coerceString(row && row.gapStatus).trim(),
+      gapCategory: coerceString(row && row.gapCategory).trim(),
+      severity: coerceString(row && row.severity).trim(),
+      observation: coerceString(row && row.observation).trim(),
+      impact: coerceString(row && row.impact).trim(),
+      recommendedActions: normalizeStringArray(row && row.recommendedActions, { maxItems: 20, maxLen: 240 }),
+      notes: normalizeStringArray(row && row.notes, { maxItems: 20, maxLen: 240 })
+    });
+  }
+
+  return {
+    documentTitle,
+    projectName,
+    sourceSummary,
+    assumptions,
+    risks,
+    missingInfoQuestions,
+    requirementItems,
+    gapRows
+  };
+}
+
+function normalizeAcceptanceCriteriaCandidate(obj) {
+  const documentTitle = coerceString(obj && obj.documentTitle).trim();
+  const projectName = coerceString(obj && obj.projectName).trim();
+  const sourceSummary = coerceString(obj && obj.sourceSummary).trim();
+  const assumptions = normalizeStringArray(obj && obj.assumptions, { maxItems: 200, maxLen: 240 });
+  const risks = normalizeStringArray(obj && obj.risks, { maxItems: 200, maxLen: 240 });
+  const missingInfoQuestions = normalizeStringArray(obj && obj.missingInfoQuestions, { maxItems: 200, maxLen: 240 });
+
+  const requirementItems = [];
+  for (const item of Array.isArray(obj && obj.requirementItems) ? obj.requirementItems : []) {
+    requirementItems.push({
+      requirementId: coerceString(item && item.requirementId).trim(),
+      requirementText: coerceString(item && item.requirementText).trim(),
+      category: coerceString(item && item.category).trim(),
+      priority: coerceString(item && item.priority).trim(),
+      requirementSource: coerceString(item && item.requirementSource).trim(),
+      acceptanceNotes: normalizeStringArray(item && item.acceptanceNotes, { maxItems: 20, maxLen: 240 })
+    });
+  }
+
+  const criteriaRows = [];
+  for (const row of Array.isArray(obj && obj.criteriaRows) ? obj.criteriaRows : []) {
+    criteriaRows.push({
+      criteriaId: coerceString(row && row.criteriaId).trim(),
+      requirementId: coerceString(row && row.requirementId).trim(),
+      criterion: coerceString(row && row.criterion).trim(),
+      criteriaType: coerceString(row && row.criteriaType).trim(),
+      clarityStatus: coerceString(row && row.clarityStatus).trim(),
+      notes: normalizeStringArray(row && row.notes, { maxItems: 20, maxLen: 240 })
+    });
+  }
+
+  return {
+    documentTitle,
+    projectName,
+    sourceSummary,
+    assumptions,
+    risks,
+    missingInfoQuestions,
+    requirementItems,
+    criteriaRows
+  };
+}
+
+function normalizeTestPlanDraftCandidate(obj) {
+  return {
+    documentTitle: coerceString(obj && obj.documentTitle).trim(),
+    sprintName: coerceString(obj && obj.sprintName).trim(),
+    author: coerceString(obj && obj.author).trim(),
+    sourceSummary: coerceString(obj && obj.sourceSummary).trim(),
+    introduction: coerceString(obj && obj.introduction).trim(),
+    inScope: normalizeStringArray(obj && obj.inScope, { maxItems: 50, maxLen: 240 }),
+    outOfScope: normalizeStringArray(obj && obj.outOfScope, { maxItems: 50, maxLen: 240 }),
+    risks: normalizeStringArray(obj && obj.risks, { maxItems: 50, maxLen: 240 }),
+    resources: {
+      testers: normalizeStringArray(obj && obj.resources && obj.resources.testers, { maxItems: 20, maxLen: 120 }),
+      developers: normalizeStringArray(obj && obj.resources && obj.resources.developers, { maxItems: 20, maxLen: 120 })
+    },
+    environmentAndTools: {
+      testEnvironment: coerceString(obj && obj.environmentAndTools && obj.environmentAndTools.testEnvironment).trim(),
+      tools: normalizeStringArray(obj && obj.environmentAndTools && obj.environmentAndTools.tools, { maxItems: 20, maxLen: 160 })
+    },
+    assumptions: normalizeStringArray(obj && obj.assumptions, { maxItems: 50, maxLen: 240 }),
+    timescales: normalizeStringArray(obj && obj.timescales, { maxItems: 20, maxLen: 160 }),
+    missingInfoQuestions: normalizeStringArray(obj && obj.missingInfoQuestions, { maxItems: 50, maxLen: 240 }),
+    featureRows: (Array.isArray(obj && obj.featureRows) ? obj.featureRows : []).map((row) => ({
+      feature: coerceString(row && row.feature).trim(),
+      jiraTicket: coerceString(row && row.jiraTicket).trim(),
+      testObjective: coerceString(row && row.testObjective).trim(),
+      priority: coerceString(row && row.priority).trim(),
+      testStatus: coerceString(row && row.testStatus).trim(),
+      testCases: coerceString(row && row.testCases).trim(),
+      defectIds: coerceString(row && row.defectIds).trim()
+    }))
+  };
+}
+
 function postProcessSuite(suite, opts) {
   const options = opts || {};
   const maxTestCases = Number.isFinite(options.maxTestCases) ? options.maxTestCases : 200;
@@ -131,6 +301,345 @@ function postProcessSuite(suite, opts) {
 
 function postProcessPreflight(preflight) {
   return normalizePreflightCandidate(preflight);
+}
+
+function postProcessRtm(rtm) {
+  const normalized = normalizeRtmCandidate(rtm);
+
+  const requirementItems = [];
+  const reqIdMap = new Map();
+  const seenRequirementKeys = new Set();
+
+  for (const item of normalized.requirementItems) {
+    const textKey = String(item.requirementText || "").toLowerCase().trim();
+    if (!textKey) continue;
+    if (seenRequirementKeys.has(textKey)) continue;
+    seenRequirementKeys.add(textKey);
+
+    const nextId = `REQ-${String(requirementItems.length + 1).padStart(3, "0")}`;
+    const originalId = item.requirementId || nextId;
+    reqIdMap.set(originalId, nextId);
+
+    requirementItems.push({
+      ...item,
+      requirementId: nextId
+    });
+  }
+
+  const validReqIds = new Set(requirementItems.map((item) => item.requirementId));
+  const traceRows = [];
+  const seenTraceKeys = new Set();
+
+  for (const row of normalized.traceRows) {
+    const mappedReqId = reqIdMap.get(row.requirementId) || row.requirementId;
+    if (!validReqIds.has(mappedReqId)) continue;
+
+    const rowKey = [
+      mappedReqId,
+      String(row.coverageStatus || "").toLowerCase().trim(),
+      (Array.isArray(row.testCaseRefs) ? row.testCaseRefs : []).join("|").toLowerCase(),
+      (Array.isArray(row.proposedTestConditions) ? row.proposedTestConditions : []).join("|").toLowerCase()
+    ].join("::");
+    if (seenTraceKeys.has(rowKey)) continue;
+    seenTraceKeys.add(rowKey);
+
+    traceRows.push({
+      ...row,
+      traceId: `RTM-${String(traceRows.length + 1).padStart(3, "0")}`,
+      requirementId: mappedReqId,
+      owner: row.owner || "QA"
+    });
+  }
+
+  return {
+    ...normalized,
+    documentTitle: normalized.documentTitle || "Requirements Traceability Matrix",
+    projectName: normalized.projectName || "Unspecified Project",
+    sourceSummary: normalized.sourceSummary || "Generated from provided requirements and clarifications.",
+    requirementItems,
+    traceRows
+  };
+}
+
+function postProcessCoverageGap(doc) {
+  const normalized = normalizeCoverageGapCandidate(doc);
+
+  const requirementItems = [];
+  const reqIdMap = new Map();
+  const seenRequirementKeys = new Set();
+
+  for (const item of normalized.requirementItems) {
+    const textKey = String(item.requirementText || "").toLowerCase().trim();
+    if (!textKey) continue;
+    if (seenRequirementKeys.has(textKey)) continue;
+    seenRequirementKeys.add(textKey);
+
+    const nextId = `REQ-${String(requirementItems.length + 1).padStart(3, "0")}`;
+    const originalId = item.requirementId || nextId;
+    reqIdMap.set(originalId, nextId);
+
+    requirementItems.push({
+      ...item,
+      requirementId: nextId
+    });
+  }
+
+  const validReqIds = new Set(requirementItems.map((item) => item.requirementId));
+  const gapRows = [];
+  const seenGapKeys = new Set();
+
+  for (const row of normalized.gapRows) {
+    const mappedReqId = reqIdMap.get(row.requirementId) || row.requirementId;
+    if (!validReqIds.has(mappedReqId)) continue;
+
+    const gapKey = [
+      mappedReqId,
+      String(row.gapStatus || "").toLowerCase().trim(),
+      String(row.gapCategory || "").toLowerCase().trim(),
+      String(row.observation || "").toLowerCase().trim()
+    ].join("::");
+    if (seenGapKeys.has(gapKey)) continue;
+    seenGapKeys.add(gapKey);
+
+    gapRows.push({
+      ...row,
+      gapId: `GAP-${String(gapRows.length + 1).padStart(3, "0")}`,
+      requirementId: mappedReqId
+    });
+  }
+
+  return {
+    ...normalized,
+    documentTitle: normalized.documentTitle || "Coverage Gap Analysis",
+    projectName: normalized.projectName || "Unspecified Project",
+    sourceSummary: normalized.sourceSummary || "Generated from provided requirements and clarifications.",
+    requirementItems,
+    gapRows
+  };
+}
+
+function mergeCoverageGapDocuments(documents) {
+  const docs = Array.isArray(documents) ? documents.filter(Boolean) : [];
+  const merged = {
+    documentTitle: "Coverage Gap Analysis",
+    projectName: "Unspecified Project",
+    sourceSummary: docs
+      .map((doc) => String(doc.sourceSummary || "").trim())
+      .filter(Boolean)
+      .join(" ")
+      .trim(),
+    assumptions: [],
+    risks: [],
+    missingInfoQuestions: [],
+    requirementItems: [],
+    gapRows: []
+  };
+
+  const seenAssumptions = new Set();
+  const seenRisks = new Set();
+  const seenMissing = new Set();
+
+  for (const doc of docs) {
+    if (doc.documentTitle && merged.documentTitle === "Coverage Gap Analysis") {
+      merged.documentTitle = doc.documentTitle;
+    }
+    if (doc.projectName && merged.projectName === "Unspecified Project") {
+      merged.projectName = doc.projectName;
+    }
+
+    for (const item of Array.isArray(doc.assumptions) ? doc.assumptions : []) {
+      const key = String(item).toLowerCase().trim();
+      if (!key || seenAssumptions.has(key)) continue;
+      seenAssumptions.add(key);
+      merged.assumptions.push(item);
+    }
+    for (const item of Array.isArray(doc.risks) ? doc.risks : []) {
+      const key = String(item).toLowerCase().trim();
+      if (!key || seenRisks.has(key)) continue;
+      seenRisks.add(key);
+      merged.risks.push(item);
+    }
+    for (const item of Array.isArray(doc.missingInfoQuestions) ? doc.missingInfoQuestions : []) {
+      const key = String(item).toLowerCase().trim();
+      if (!key || seenMissing.has(key)) continue;
+      seenMissing.add(key);
+      merged.missingInfoQuestions.push(item);
+    }
+
+    merged.requirementItems.push(...(Array.isArray(doc.requirementItems) ? doc.requirementItems : []));
+    merged.gapRows.push(...(Array.isArray(doc.gapRows) ? doc.gapRows : []));
+  }
+
+  if (!merged.sourceSummary) {
+    merged.sourceSummary = "Generated from provided requirements and clarifications.";
+  }
+
+  return postProcessCoverageGap(merged);
+}
+
+function postProcessAcceptanceCriteria(doc) {
+  const normalized = normalizeAcceptanceCriteriaCandidate(doc);
+
+  const requirementItems = [];
+  const reqIdMap = new Map();
+  const seenRequirementKeys = new Set();
+
+  for (const item of normalized.requirementItems) {
+    const textKey = String(item.requirementText || "").toLowerCase().trim();
+    if (!textKey) continue;
+    if (seenRequirementKeys.has(textKey)) continue;
+    seenRequirementKeys.add(textKey);
+
+    const nextId = `REQ-${String(requirementItems.length + 1).padStart(3, "0")}`;
+    const originalId = item.requirementId || nextId;
+    reqIdMap.set(originalId, nextId);
+
+    requirementItems.push({
+      ...item,
+      requirementId: nextId
+    });
+  }
+
+  const validReqIds = new Set(requirementItems.map((item) => item.requirementId));
+  const criteriaRows = [];
+  const seenCriteriaKeys = new Set();
+
+  for (const row of normalized.criteriaRows) {
+    const mappedReqId = reqIdMap.get(row.requirementId) || row.requirementId;
+    if (!validReqIds.has(mappedReqId)) continue;
+
+    const criteriaKey = [
+      mappedReqId,
+      String(row.criterion || "").toLowerCase().trim(),
+      String(row.criteriaType || "").toLowerCase().trim(),
+      String(row.clarityStatus || "").toLowerCase().trim()
+    ].join("::");
+    if (seenCriteriaKeys.has(criteriaKey)) continue;
+    seenCriteriaKeys.add(criteriaKey);
+
+    criteriaRows.push({
+      ...row,
+      criteriaId: `AC-${String(criteriaRows.length + 1).padStart(3, "0")}`,
+      requirementId: mappedReqId
+    });
+  }
+
+  return {
+    ...normalized,
+    documentTitle: normalized.documentTitle || "Acceptance Criteria Breakdown",
+    projectName: normalized.projectName || "Unspecified Project",
+    sourceSummary: normalized.sourceSummary || "Generated from provided requirements and clarifications.",
+    requirementItems,
+    criteriaRows
+  };
+}
+
+function mergeAcceptanceCriteriaDocuments(documents) {
+  const docs = Array.isArray(documents) ? documents.filter(Boolean) : [];
+  const merged = {
+    documentTitle: "Acceptance Criteria Breakdown",
+    projectName: "Unspecified Project",
+    sourceSummary: docs.map((doc) => String(doc.sourceSummary || "").trim()).filter(Boolean).join(" ").trim(),
+    assumptions: [],
+    risks: [],
+    missingInfoQuestions: [],
+    requirementItems: [],
+    criteriaRows: []
+  };
+
+  const seenAssumptions = new Set();
+  const seenRisks = new Set();
+  const seenMissing = new Set();
+
+  for (const doc of docs) {
+    if (doc.documentTitle && merged.documentTitle === "Acceptance Criteria Breakdown") merged.documentTitle = doc.documentTitle;
+    if (doc.projectName && merged.projectName === "Unspecified Project") merged.projectName = doc.projectName;
+
+    for (const item of Array.isArray(doc.assumptions) ? doc.assumptions : []) {
+      const key = String(item).toLowerCase().trim();
+      if (!key || seenAssumptions.has(key)) continue;
+      seenAssumptions.add(key);
+      merged.assumptions.push(item);
+    }
+    for (const item of Array.isArray(doc.risks) ? doc.risks : []) {
+      const key = String(item).toLowerCase().trim();
+      if (!key || seenRisks.has(key)) continue;
+      seenRisks.add(key);
+      merged.risks.push(item);
+    }
+    for (const item of Array.isArray(doc.missingInfoQuestions) ? doc.missingInfoQuestions : []) {
+      const key = String(item).toLowerCase().trim();
+      if (!key || seenMissing.has(key)) continue;
+      seenMissing.add(key);
+      merged.missingInfoQuestions.push(item);
+    }
+
+    merged.requirementItems.push(...(Array.isArray(doc.requirementItems) ? doc.requirementItems : []));
+    merged.criteriaRows.push(...(Array.isArray(doc.criteriaRows) ? doc.criteriaRows : []));
+  }
+
+  if (!merged.sourceSummary) merged.sourceSummary = "Generated from provided requirements and clarifications.";
+  return postProcessAcceptanceCriteria(merged);
+}
+
+function postProcessTestPlanDraft(doc) {
+  const normalized = normalizeTestPlanDraftCandidate(doc);
+  const featureRows = [];
+  const seenFeatures = new Set();
+
+  for (const row of normalized.featureRows) {
+    const key = [String(row.feature || "").toLowerCase(), String(row.jiraTicket || "").toLowerCase()].join("::");
+    if (!row.feature || seenFeatures.has(key)) continue;
+    seenFeatures.add(key);
+    featureRows.push({
+      ...row,
+      testStatus: row.testStatus || "Not Started"
+    });
+  }
+
+  return {
+    ...normalized,
+    documentTitle: normalized.documentTitle || "Test Plan Draft",
+    sprintName: normalized.sprintName || "Current Sprint",
+    author: normalized.author || "Unspecified Author",
+    sourceSummary: normalized.sourceSummary || "Generated from provided requirements and project context.",
+    introduction: normalized.introduction || "This draft test plan covers the provided sprint requirements and their core validation areas.",
+    featureRows
+  };
+}
+
+function splitRequirementBatches(text, opts) {
+  const input = String(text || "").trim();
+  if (!input) return [];
+
+  const options = opts || {};
+  const separator = options.separator || "\n\n---\n\n";
+  const maxBatchChars = Number.isFinite(options.maxBatchChars) ? options.maxBatchChars : 9000;
+  const parts = input.split(separator).map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1) {
+    if (input.length <= maxBatchChars) return [input];
+    const chunks = [];
+    for (let i = 0; i < input.length; i += maxBatchChars) {
+      chunks.push(input.slice(i, i + maxBatchChars).trim());
+    }
+    return chunks.filter(Boolean);
+  }
+
+  const batches = [];
+  let current = "";
+
+  for (const part of parts.length ? parts : [input]) {
+    const candidate = current ? `${current}${separator}${part}` : part;
+    if (current && candidate.length > maxBatchChars) {
+      batches.push(current);
+      current = part;
+      continue;
+    }
+    current = candidate;
+  }
+
+  if (current) batches.push(current);
+  return batches.length ? batches : [input];
 }
 
 function safeJsonParse(text) {
@@ -382,8 +891,19 @@ module.exports = {
   normalizeStringArray,
   normalizeSuiteCandidate,
   normalizePreflightCandidate,
+  normalizeRtmCandidate,
+  normalizeCoverageGapCandidate,
+  normalizeAcceptanceCriteriaCandidate,
+  normalizeTestPlanDraftCandidate,
   postProcessSuite,
   postProcessPreflight,
+  postProcessRtm,
+  postProcessCoverageGap,
+  postProcessAcceptanceCriteria,
+  postProcessTestPlanDraft,
+  mergeCoverageGapDocuments,
+  mergeAcceptanceCriteriaDocuments,
+  splitRequirementBatches,
   safeJsonParse,
   extractFirstJsonObject,
   extractFirstJsonValue,

@@ -33,6 +33,8 @@ export default function StepAnalyze({
   theme,
   busy,
   hasAnyRequirements,
+  artifactMode,
+  documentType,
   // Preflight
   preflight, answersByQuestion, setAnswersByQuestion, preflightSkills,
   callPreflight,
@@ -43,6 +45,7 @@ export default function StepAnalyze({
   jiraImportedCount,
   callAnalyze,
   callGenerateFromAnalysis,
+  callGenerateDocument,
   // Callbacks passed from App.jsx
   cancelInFlight,
   setInfo,
@@ -357,10 +360,26 @@ export default function StepAnalyze({
                   <ScienceIcon sx={{ color: purpleAccent, fontSize: 26 }} />
                 </Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, textAlign: 'center' }}>
-                  Analyze & Recommend Techniques
+                  {artifactMode === 'tests'
+                    ? 'Analyze & Recommend Techniques'
+                    : documentType === 'rtm'
+                      ? 'Generate RTM'
+                      : documentType === 'coverage-gap-analysis'
+                        ? 'Generate Coverage Gap Analysis'
+                        : documentType === 'acceptance-criteria-breakdown'
+                          ? 'Generate Acceptance Criteria Breakdown'
+                          : 'Generate Test Plan Draft'}
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 420, fontSize: '0.84rem' }}>
-                  The AI will extract testable elements from your requirements and recommend the best testing techniques.
+                  {artifactMode === 'tests'
+                    ? 'The AI will extract testable elements from your requirements and recommend the best testing techniques.'
+                    : documentType === 'rtm'
+                      ? 'The AI will convert your requirements and clarifications into a traceability matrix draft.'
+                      : documentType === 'coverage-gap-analysis'
+                        ? 'The AI will review your requirements for ambiguity, missing validations, weak testability, and likely coverage blind spots.'
+                        : documentType === 'acceptance-criteria-breakdown'
+                          ? 'The AI will break your requirements into atomic, testable acceptance criteria.'
+                          : 'The AI will combine your requirements with the provided sprint context to draft a compact test plan.'}
                 </Typography>
               </Stack>
 
@@ -369,7 +388,7 @@ export default function StepAnalyze({
                   variant="contained"
                   startIcon={busy ? null : <ScienceIcon />}
                   disabled={busy || !hasAnyRequirements}
-                  onClick={callAnalyze}
+                  onClick={artifactMode === 'tests' ? callAnalyze : callGenerateDocument}
                   sx={{
                     px: 3.5,
                     py: 1,
@@ -385,7 +404,17 @@ export default function StepAnalyze({
                     '&.Mui-disabled': { backgroundColor: disabledBtnBg, color: disabledBtnColor },
                   }}
                 >
-                  {busy ? 'Analyzing...' : 'Analyze requirements'}
+                  {busy
+                    ? (artifactMode === 'tests' ? 'Analyzing...' : 'Generating...')
+                    : (artifactMode === 'tests'
+                      ? 'Analyze requirements'
+                      : documentType === 'rtm'
+                        ? 'Generate RTM'
+                        : documentType === 'coverage-gap-analysis'
+                          ? 'Generate Coverage Gap Analysis'
+                          : documentType === 'acceptance-criteria-breakdown'
+                            ? 'Generate Acceptance Criteria Breakdown'
+                            : 'Generate Test Plan Draft')}
                 </Button>
                 {busy && (
                   <Button variant="text" size="small" onClick={cancelInFlight} sx={{ color: 'text.secondary', textTransform: 'none' }}>

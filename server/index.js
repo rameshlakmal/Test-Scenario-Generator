@@ -13,17 +13,30 @@ const Ajv = require("ajv");
 
 // Auth removed — users provide their own API keys via X-LLM-API-Key header
 const { loadSkills } = require("./skills");
+const { loadArtifacts } = require("./artifacts");
 const { selectSkills } = require("./selectSkills");
 const {
   buildSystemPrompt,
   buildPreflightSystemPrompt,
+  buildRtmSystemPrompt,
+  buildCoverageGapSystemPrompt,
+  buildAcceptanceCriteriaSystemPrompt,
+  buildTestPlanDraftSystemPrompt,
   buildAnalysisSystemPrompt,
   buildAnalysisUserPrompt,
   buildSkillGenerationSystemPrompt,
   buildSkillGenerationUserPrompt,
   buildUserPrompt,
   buildPreflightUserPrompt,
+  buildRtmUserPrompt,
+  buildCoverageGapUserPrompt,
+  buildAcceptanceCriteriaUserPrompt,
+  buildTestPlanDraftUserPrompt,
   schemaHintText,
+  rtmSchemaHintText,
+  coverageGapSchemaHintText,
+  acceptanceCriteriaSchemaHintText,
+  testPlanDraftSchemaHintText,
   analysisSchemaHintText
 } = require("./prompt");
 const { generateText } = require("./llm");
@@ -35,10 +48,17 @@ const {
   truncateText,
   postProcessSuite,
   postProcessPreflight,
+  postProcessRtm,
+  postProcessCoverageGap,
+  postProcessAcceptanceCriteria,
+  postProcessTestPlanDraft,
+  mergeCoverageGapDocuments,
+  mergeAcceptanceCriteriaDocuments,
+  splitRequirementBatches,
   mergeSuites,
   normalizeSuiteCandidate
 } = require("./util");
-const { analysisSchema, testSuiteSchema, preflightSchema } = require("./schema");
+const { analysisSchema, testSuiteSchema, preflightSchema, rtmDocumentSchema, coverageGapDocumentSchema, acceptanceCriteriaDocumentSchema, testPlanDraftDocumentSchema } = require("./schema");
 const jira = require("./jira");
 const {
   normalizeBaseUrl,
@@ -112,11 +132,17 @@ const upload = multer({
 });
 
 const skills = loadSkills();
+const artifacts = loadArtifacts();
+const artifactsById = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 const validateAnalysis = ajv.compile(analysisSchema);
 const validateSuite = ajv.compile(testSuiteSchema);
 const validatePreflight = ajv.compile(preflightSchema);
+const validateRtm = ajv.compile(rtmDocumentSchema);
+const validateCoverageGap = ajv.compile(coverageGapDocumentSchema);
+const validateAcceptanceCriteria = ajv.compile(acceptanceCriteriaDocumentSchema);
+const validateTestPlanDraft = ajv.compile(testPlanDraftDocumentSchema);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
@@ -612,6 +638,383 @@ async function generateAndValidatePreflight(ctx) {
   throw err;
 }
 
+async function generateAndValidateRtm(ctx) {
+  const system = buildRtmSystemPrompt();
+  const user = buildRtmUserPrompt({
+    templateMarkdown: ctx.templateMarkdown,
+    requirements: ctx.requirements,
+    clarifications: ctx.clarifications,
+    schemaHint: rtmSchemaHintText()
+  });
+
+  const first = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user,
+    temperature: 0.2,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? rtmDocumentSchema : undefined
+  });
+
+  const attemptParse = (text) => {
+    const direct = safeJsonParse(text);
+    if (direct.ok) return { ok: true, obj: direct.value };
+    const extracted = extractFirstJsonValue(text);
+    if (!extracted) return { ok: false, reason: "no-json-found" };
+    const second = safeJsonParse(extracted);
+    if (!second.ok) return { ok: false, reason: "json-parse-failed" };
+    return { ok: true, obj: second.value };
+  };
+
+  const parsed1 = attemptParse(first.text);
+  if (parsed1.ok && validateRtm(parsed1.obj)) {
+    const processed = postProcessRtm(parsed1.obj);
+    return { rtm: processed, rawText: first.text, repaired: false };
+  }
+
+  const errors1 = formatAjvErrors(validateRtm.errors);
+  const repairPrompt = [
+    "Your previous output did not match the required RTM JSON shape.",
+    "Fix it and return ONLY the corrected JSON object.",
+    "Required top-level keys: documentTitle, projectName, sourceSummary, assumptions, risks, missingInfoQuestions, requirementItems, traceRows.",
+    "Every traceRows[].requirementId must refer to a requirementItems[].requirementId value.",
+    "Do not add any extra keys.",
+    "\nSchema hint:\n" + rtmSchemaHintText(),
+    "\nValidation errors:\n" + errors1,
+    "\nPrevious output:\n" + first.text
+  ].join("\n");
+
+  const repaired = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user: repairPrompt,
+    temperature: 0.1,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? rtmDocumentSchema : undefined
+  });
+
+  const parsed2 = attemptParse(repaired.text);
+  if (parsed2.ok && validateRtm(parsed2.obj)) {
+    const processed = postProcessRtm(parsed2.obj);
+    return { rtm: processed, rawText: repaired.text, repaired: true };
+  }
+
+  const errors2 = formatAjvErrors(validateRtm.errors);
+  const reason = parsed2.ok ? "schema-validation-failed" : parsed2.reason;
+  const details =
+    parsed2.ok
+      ? errors2
+      : parsed2.reason === "no-json-found"
+        ? "No JSON detected in model output: " + truncateText(repaired.text, 600)
+        : errors1;
+  const err = new Error(`Model RTM output invalid (${reason}): ${details}`);
+  err.raw = repaired.text;
+  throw err;
+}
+
+async function generateAndValidateCoverageGap(ctx) {
+  const system = buildCoverageGapSystemPrompt();
+  const user = buildCoverageGapUserPrompt({
+    templateMarkdown: ctx.templateMarkdown,
+    requirements: ctx.requirements,
+    clarifications: ctx.clarifications,
+    schemaHint: coverageGapSchemaHintText()
+  });
+
+  const first = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user,
+    temperature: 0.2,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? coverageGapDocumentSchema : undefined
+  });
+
+  const attemptParse = (text) => {
+    const direct = safeJsonParse(text);
+    if (direct.ok) return { ok: true, obj: direct.value };
+    const extracted = extractFirstJsonValue(text);
+    if (!extracted) return { ok: false, reason: "no-json-found" };
+    const second = safeJsonParse(extracted);
+    if (!second.ok) return { ok: false, reason: "json-parse-failed" };
+    return { ok: true, obj: second.value };
+  };
+
+  const parsed1 = attemptParse(first.text);
+  if (parsed1.ok && validateCoverageGap(parsed1.obj)) {
+    const processed = postProcessCoverageGap(parsed1.obj);
+    return { document: processed, rawText: first.text, repaired: false };
+  }
+
+  const errors1 = formatAjvErrors(validateCoverageGap.errors);
+  const repairPrompt = [
+    "Your previous output did not match the required Coverage Gap Analysis JSON shape.",
+    "Fix it and return ONLY the corrected JSON object.",
+    "Required top-level keys: documentTitle, projectName, sourceSummary, assumptions, risks, missingInfoQuestions, requirementItems, gapRows.",
+    "Every gapRows[].requirementId must refer to a requirementItems[].requirementId value.",
+    "Do not add any extra keys.",
+    "\nSchema hint:\n" + coverageGapSchemaHintText(),
+    "\nValidation errors:\n" + errors1,
+    "\nPrevious output:\n" + first.text
+  ].join("\n");
+
+  const repaired = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user: repairPrompt,
+    temperature: 0.1,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? coverageGapDocumentSchema : undefined
+  });
+
+  const parsed2 = attemptParse(repaired.text);
+  if (parsed2.ok && validateCoverageGap(parsed2.obj)) {
+    const processed = postProcessCoverageGap(parsed2.obj);
+    return { document: processed, rawText: repaired.text, repaired: true };
+  }
+
+  const errors2 = formatAjvErrors(validateCoverageGap.errors);
+  const reason = parsed2.ok ? "schema-validation-failed" : parsed2.reason;
+  const details =
+    parsed2.ok
+      ? errors2
+      : parsed2.reason === "no-json-found"
+        ? "No JSON detected in model output: " + truncateText(repaired.text, 600)
+        : errors1;
+  const err = new Error(`Model Coverage Gap output invalid (${reason}): ${details}`);
+  err.raw = repaired.text;
+  throw err;
+}
+
+async function generateCoverageGapWithBatching(ctx) {
+  const requirementBatches = splitRequirementBatches(ctx.requirements, {
+    maxBatchChars: 9000
+  });
+
+  if (requirementBatches.length <= 1) {
+    const single = await generateAndValidateCoverageGap(ctx);
+    return { document: single.document, repaired: single.repaired, batchCount: 1 };
+  }
+
+  const documents = [];
+  let repaired = false;
+
+  for (const requirements of requirementBatches) {
+    const partial = await generateAndValidateCoverageGap({
+      ...ctx,
+      requirements
+    });
+    documents.push(partial.document);
+    repaired = repaired || Boolean(partial.repaired);
+  }
+
+  return {
+    document: mergeCoverageGapDocuments(documents),
+    repaired,
+    batchCount: requirementBatches.length
+  };
+}
+
+async function generateAndValidateAcceptanceCriteria(ctx) {
+  const system = buildAcceptanceCriteriaSystemPrompt();
+  const user = buildAcceptanceCriteriaUserPrompt({
+    templateMarkdown: ctx.templateMarkdown,
+    requirements: ctx.requirements,
+    clarifications: ctx.clarifications,
+    schemaHint: acceptanceCriteriaSchemaHintText()
+  });
+
+  const first = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user,
+    temperature: 0.2,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? acceptanceCriteriaDocumentSchema : undefined
+  });
+
+  const attemptParse = (text) => {
+    const direct = safeJsonParse(text);
+    if (direct.ok) return { ok: true, obj: direct.value };
+    const extracted = extractFirstJsonValue(text);
+    if (!extracted) return { ok: false, reason: "no-json-found" };
+    const second = safeJsonParse(extracted);
+    if (!second.ok) return { ok: false, reason: "json-parse-failed" };
+    return { ok: true, obj: second.value };
+  };
+
+  const parsed1 = attemptParse(first.text);
+  if (parsed1.ok && validateAcceptanceCriteria(parsed1.obj)) {
+    const processed = postProcessAcceptanceCriteria(parsed1.obj);
+    return { document: processed, rawText: first.text, repaired: false };
+  }
+
+  const errors1 = formatAjvErrors(validateAcceptanceCriteria.errors);
+  const repairPrompt = [
+    "Your previous output did not match the required Acceptance Criteria Breakdown JSON shape.",
+    "Fix it and return ONLY the corrected JSON object.",
+    "Required top-level keys: documentTitle, projectName, sourceSummary, assumptions, risks, missingInfoQuestions, requirementItems, criteriaRows.",
+    "Every criteriaRows[].requirementId must refer to a requirementItems[].requirementId value.",
+    "Do not add any extra keys.",
+    "\nSchema hint:\n" + acceptanceCriteriaSchemaHintText(),
+    "\nValidation errors:\n" + errors1,
+    "\nPrevious output:\n" + first.text
+  ].join("\n");
+
+  const repaired = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user: repairPrompt,
+    temperature: 0.1,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? acceptanceCriteriaDocumentSchema : undefined
+  });
+
+  const parsed2 = attemptParse(repaired.text);
+  if (parsed2.ok && validateAcceptanceCriteria(parsed2.obj)) {
+    const processed = postProcessAcceptanceCriteria(parsed2.obj);
+    return { document: processed, rawText: repaired.text, repaired: true };
+  }
+
+  const errors2 = formatAjvErrors(validateAcceptanceCriteria.errors);
+  const reason = parsed2.ok ? "schema-validation-failed" : parsed2.reason;
+  const details =
+    parsed2.ok
+      ? errors2
+      : parsed2.reason === "no-json-found"
+        ? "No JSON detected in model output: " + truncateText(repaired.text, 600)
+        : errors1;
+  const err = new Error(`Model Acceptance Criteria output invalid (${reason}): ${details}`);
+  err.raw = repaired.text;
+  throw err;
+}
+
+async function generateAcceptanceCriteriaWithBatching(ctx) {
+  const requirementBatches = splitRequirementBatches(ctx.requirements, {
+    maxBatchChars: 9000
+  });
+
+  if (requirementBatches.length <= 1) {
+    const single = await generateAndValidateAcceptanceCriteria(ctx);
+    return { document: single.document, repaired: single.repaired, batchCount: 1 };
+  }
+
+  const documents = [];
+  let repaired = false;
+
+  for (const requirements of requirementBatches) {
+    const partial = await generateAndValidateAcceptanceCriteria({
+      ...ctx,
+      requirements
+    });
+    documents.push(partial.document);
+    repaired = repaired || Boolean(partial.repaired);
+  }
+
+  return {
+    document: mergeAcceptanceCriteriaDocuments(documents),
+    repaired,
+    batchCount: requirementBatches.length
+  };
+}
+
+async function generateAndValidateTestPlanDraft(ctx) {
+  const system = buildTestPlanDraftSystemPrompt();
+  const user = buildTestPlanDraftUserPrompt({
+    projectContext: ctx.projectContext,
+    requirements: ctx.requirements,
+    clarifications: ctx.clarifications,
+    schemaHint: testPlanDraftSchemaHintText()
+  });
+
+  const first = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user,
+    temperature: 0.2,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? testPlanDraftDocumentSchema : undefined
+  });
+
+  const attemptParse = (text) => {
+    const direct = safeJsonParse(text);
+    if (direct.ok) return { ok: true, obj: direct.value };
+    const extracted = extractFirstJsonValue(text);
+    if (!extracted) return { ok: false, reason: "no-json-found" };
+    const second = safeJsonParse(extracted);
+    if (!second.ok) return { ok: false, reason: "json-parse-failed" };
+    return { ok: true, obj: second.value };
+  };
+
+  const parsed1 = attemptParse(first.text);
+  if (parsed1.ok && validateTestPlanDraft(parsed1.obj)) {
+    const processed = postProcessTestPlanDraft(parsed1.obj);
+    return { document: processed, rawText: first.text, repaired: false };
+  }
+
+  const errors1 = formatAjvErrors(validateTestPlanDraft.errors);
+  const repairPrompt = [
+    "Your previous output did not match the required Test Plan Draft JSON shape.",
+    "Fix it and return ONLY the corrected JSON object.",
+    "Required top-level keys: documentTitle, sprintName, author, sourceSummary, introduction, inScope, outOfScope, risks, resources, environmentAndTools, assumptions, timescales, missingInfoQuestions, featureRows.",
+    "Do not add any extra keys.",
+    "\nSchema hint:\n" + testPlanDraftSchemaHintText(),
+    "\nValidation errors:\n" + errors1,
+    "\nPrevious output:\n" + first.text
+  ].join("\n");
+
+  const repaired = await generateText({
+    provider: ctx.provider,
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    system,
+    user: repairPrompt,
+    temperature: 0.1,
+    maxTokens: 4096,
+    timeoutMs: LLM_TIMEOUT_MS,
+    jsonSchema: ctx.provider === "openai" || ctx.provider === "gemini" ? testPlanDraftDocumentSchema : undefined
+  });
+
+  const parsed2 = attemptParse(repaired.text);
+  if (parsed2.ok && validateTestPlanDraft(parsed2.obj)) {
+    const processed = postProcessTestPlanDraft(parsed2.obj);
+    return { document: processed, rawText: repaired.text, repaired: true };
+  }
+
+  const errors2 = formatAjvErrors(validateTestPlanDraft.errors);
+  const reason = parsed2.ok ? "schema-validation-failed" : parsed2.reason;
+  const details =
+    parsed2.ok
+      ? errors2
+      : parsed2.reason === "no-json-found"
+        ? "No JSON detected in model output: " + truncateText(repaired.text, 600)
+        : errors1;
+  const err = new Error(`Model Test Plan Draft output invalid (${reason}): ${details}`);
+  err.raw = repaired.text;
+  throw err;
+}
+
 async function generateAndValidateSuite(ctx) {
   const system = buildSystemPrompt();
   const user = buildUserPrompt({
@@ -919,6 +1322,98 @@ async function generateParallel(tasks, maxConcurrency) {
 
   return results;
 }
+
+app.post(
+  "/api/generate-document",
+  upload.single("requirementFile"),
+  async (req, res) => {
+    let debug = null;
+    try {
+      const requirementText = normalizeReqText(req.body && req.body.requirementText);
+      const uploadedText = normalizeReqText(await fileTextFromUpload(req.file));
+      const combined = [uploadedText, requirementText].filter(Boolean).join("\n\n---\n\n");
+
+      if (!combined) {
+        return res.status(400).json({
+          error: "Provide requirementText or upload a requirementFile (.txt/.md/.pdf/.docx/.html)"
+        });
+      }
+
+      const clarifications = normalizeReqText(req.body && req.body.clarifications);
+      const documentType = String((req.body && req.body.documentType) || "rtm").trim();
+      const provider = String((req.body && req.body.provider) || "");
+      const modelOverride = String((req.body && req.body.model) || "").trim();
+      const cfg = getProviderConfig(provider, req);
+      const model = modelOverride || cfg.model;
+
+      const okProvider = validateProviderAndKey(cfg);
+      if (!okProvider.ok) {
+        return res.status(400).json({ error: okProvider.error });
+      }
+
+      debug = { provider: cfg.provider, model };
+
+      if (documentType !== "rtm" && documentType !== "coverage-gap-analysis" && documentType !== "acceptance-criteria-breakdown" && documentType !== "test-plan-draft") {
+        return res.status(400).json({ error: `Unsupported documentType: ${documentType}` });
+      }
+
+      const rawDocumentContext = String((req.body && req.body.documentContext) || "").trim();
+      const documentContext = rawDocumentContext || "No additional project context provided.";
+      const templateMarkdown = (artifactsById.get(documentType) && artifactsById.get(documentType).markdown) || "";
+
+      const result = documentType === "rtm"
+        ? await generateAndValidateRtm({
+            provider: cfg.provider,
+            apiKey: cfg.apiKey,
+            model,
+            templateMarkdown,
+            requirements: combined,
+            clarifications
+          })
+        : documentType === "coverage-gap-analysis"
+          ? await generateCoverageGapWithBatching({
+              provider: cfg.provider,
+              apiKey: cfg.apiKey,
+              model,
+              templateMarkdown,
+              requirements: combined,
+              clarifications
+            })
+          : documentType === "test-plan-draft"
+            ? await generateAndValidateTestPlanDraft({
+                provider: cfg.provider,
+                apiKey: cfg.apiKey,
+                model,
+                requirements: combined,
+                clarifications,
+                projectContext: documentContext
+              })
+          : await generateAcceptanceCriteriaWithBatching({
+              provider: cfg.provider,
+              apiKey: cfg.apiKey,
+              model,
+              templateMarkdown,
+              requirements: combined,
+              clarifications
+            });
+
+      res.json({
+        documentType,
+        provider: cfg.provider,
+        model,
+        repaired: result.repaired,
+        batchCount: result.batchCount || 1,
+        document: documentType === "rtm" ? result.rtm : result.document
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err && err.message ? err.message : String(err),
+        debug,
+        hint: "Check provider API key, model name, and ensure the LLM returns strict JSON."
+      });
+    }
+  }
+);
 
 app.post(
   "/api/analyze",

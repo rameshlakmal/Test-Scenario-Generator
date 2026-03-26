@@ -224,6 +224,7 @@ Push generated test cases to [AIO Tests](https://marketplace.atlassian.com/apps/
 | `POST` | `/api/preflight` | Identify ambiguities before generation |
 | `POST` | `/api/analyze` | Analyze requirement, recommend techniques |
 | `POST` | `/api/generate-tests` | Generate test suite (per-skill parallel) |
+| `POST` | `/api/generate-document` | Generate a QA document such as RTM or Coverage Gap Analysis |
 | `GET` | `/api/jira/status` | Check Jira connection status |
 | `GET` | `/api/jira/projects` | List Jira projects |
 | `GET` | `/api/jira/epics` | List epics for a project |

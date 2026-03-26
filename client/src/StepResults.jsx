@@ -46,7 +46,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import SearchIcon from '@mui/icons-material/Search'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import { purple } from './theme'
-import { download, toCsv, exportPdf, joinLines, BulletList, OrderedList, listOrNone } from './helpers'
+import { download, toCsv, exportPdf, exportQADocumentPdf, joinLines, BulletList, OrderedList, listOrNone } from './helpers'
 
 const priorityColors = {
   P0: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.25)', label: 'Critical' },
@@ -57,7 +57,10 @@ const priorityColors = {
 
 export default function StepResults({
   theme, isSmDown,
+  artifactMode,
+  documentType,
   suite, suiteMeta, selectedSkills,
+  documentResult, documentMeta,
   duplicateGroups,
   skillDiagrams,
   // Filters
@@ -105,6 +108,13 @@ export default function StepResults({
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [showAioToken, setShowAioToken] = useState(false)
 
+  const gapStatusConfig = {
+    'major-gap': { label: 'Major Gaps', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.10)', border: 'rgba(239, 68, 68, 0.20)' },
+    'partial-gap': { label: 'Partial Gaps', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.10)', border: 'rgba(245, 158, 11, 0.20)' },
+    clear: { label: 'Clear Items', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.10)', border: 'rgba(34, 197, 94, 0.20)' },
+    'not-testable': { label: 'Not Testable', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.10)', border: 'rgba(107, 114, 128, 0.20)' },
+  }
+
   const displayedSkills = useMemo(() => {
     const list = Array.isArray(selectedSkills) ? selectedSkills.slice() : []
     list.sort((a, b) => {
@@ -151,7 +161,7 @@ export default function StepResults({
   }, [suite, displayedSkills, skillDiagrams])
 
   // ─── Empty state ───
-  if (!suite) {
+  if (!suite && !documentResult) {
     return (
       <Card sx={{ overflow: 'visible' }}>
         <CardContent>
@@ -171,7 +181,7 @@ export default function StepResults({
             </Box>
             <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 600 }}>No results yet</Typography>
             <Typography variant="body2" sx={{ color: 'text.disabled', textAlign: 'center', maxWidth: 320 }}>
-              Go back to the Analyze step to generate test cases from your requirements.
+              Go back to the Analyze step to generate results from your requirements.
             </Typography>
             <Button
               variant="outlined"
@@ -194,6 +204,416 @@ export default function StepResults({
   }
 
   // ─── Results ───
+  if (artifactMode === 'document' && documentResult) {
+    const reqs = Array.isArray(documentResult.requirementItems) ? documentResult.requirementItems : []
+    const rows = documentType === 'rtm'
+      ? (Array.isArray(documentResult.traceRows) ? documentResult.traceRows : [])
+      : documentType === 'coverage-gap-analysis'
+        ? (Array.isArray(documentResult.gapRows) ? documentResult.gapRows : [])
+        : documentType === 'acceptance-criteria-breakdown'
+          ? (Array.isArray(documentResult.criteriaRows) ? documentResult.criteriaRows : [])
+          : (Array.isArray(documentResult.featureRows) ? documentResult.featureRows : [])
+    const reqMap = new Map(reqs.map((item) => [item.requirementId, item]))
+    const breakdownCounts = rows.reduce((acc, row) => {
+      const key = documentType === 'rtm'
+        ? String(row.coverageStatus || 'missing')
+        : documentType === 'coverage-gap-analysis'
+          ? String(row.gapStatus || 'major-gap')
+          : documentType === 'acceptance-criteria-breakdown'
+            ? String(row.clarityStatus || 'clear')
+            : String(row.testStatus || 'Not Started')
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+    const resultTitle = documentType === 'rtm' ? 'RTM Results' : documentType === 'coverage-gap-analysis' ? 'Coverage Gap Results' : documentType === 'acceptance-criteria-breakdown' ? 'Acceptance Criteria Results' : 'Test Plan Draft'
+    const resultLabel = documentType === 'rtm' ? 'trace rows' : documentType === 'coverage-gap-analysis' ? 'gap rows' : documentType === 'acceptance-criteria-breakdown' ? 'criteria rows' : 'feature rows'
+    const primaryTableTitle = documentType === 'rtm' ? 'Traceability Matrix' : documentType === 'coverage-gap-analysis' ? 'Coverage Gaps' : documentType === 'acceptance-criteria-breakdown' ? 'Acceptance Criteria' : 'Sprint Test Plan'
+    const gapGroups = documentType === 'coverage-gap-analysis'
+      ? ['major-gap', 'partial-gap', 'clear', 'not-testable'].map((status) => ({
+          status,
+          config: gapStatusConfig[status],
+          items: rows.filter((row) => String(row.gapStatus || '') === status)
+        })).filter((group) => group.items.length > 0)
+      : []
+
+    return (
+      <Card sx={{ overflow: 'visible', borderColor: purpleBorder }}>
+        <CardContent sx={{ p: '0 !important' }}>
+          <Box sx={{ px: 3, pt: 3, pb: 2 }}>
+            <Stack spacing={2}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <CheckCircleIcon sx={{ color: '#4ade80', fontSize: 20 }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: '1rem' }}>
+                    {resultTitle}
+                  </Typography>
+                  <Chip size="small" label={`${reqs.length} requirements`} sx={{ height: 24, fontWeight: 700, fontSize: '0.78rem', fontFamily: theme.typography.fontFamilyMonospace, backgroundColor: isDark ? 'rgba(74, 222, 128, 0.08)' : 'rgba(22, 163, 74, 0.08)', color: isDark ? '#4ade80' : '#16a34a' }} />
+                  <Chip size="small" label={`${rows.length} ${resultLabel}`} sx={{ height: 24, fontWeight: 700, fontSize: '0.78rem', fontFamily: theme.typography.fontFamilyMonospace, backgroundColor: purpleBgSubtle, color: purpleAccent }} />
+                </Stack>
+                <Box sx={{ flex: 1 }} />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<DownloadIcon sx={{ fontSize: 16 }} />}
+                  onClick={() => exportQADocumentPdf(documentType, documentResult)}
+                  sx={{
+                    borderColor: 'divider',
+                    color: 'text.secondary',
+                    textTransform: 'none',
+                    fontSize: '0.80rem',
+                    '&:hover': { borderColor: isDark ? 'rgba(167, 139, 250, 0.40)' : 'rgba(124, 58, 237, 0.30)', backgroundColor: purpleBgSubtle }
+                  }}
+                >
+                  PDF
+                </Button>
+              </Stack>
+
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                {documentResult.documentTitle || (documentType === 'rtm' ? 'Requirements Traceability Matrix' : documentType === 'coverage-gap-analysis' ? 'Coverage Gap Analysis' : documentType === 'acceptance-criteria-breakdown' ? 'Acceptance Criteria Breakdown' : 'Test Plan Draft')}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {documentResult.projectName || 'Unspecified Project'}{documentResult.sourceSummary ? ` · ${documentResult.sourceSummary}` : ''}
+              </Typography>
+
+              {documentMeta && (
+                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                  <Chip size="small" variant="outlined" label={documentMeta.provider} sx={{ height: 20, fontSize: '0.64rem', fontFamily: theme.typography.fontFamilyMonospace, borderColor: 'divider', color: 'text.disabled' }} />
+                  <Chip size="small" variant="outlined" label={documentMeta.model} sx={{ height: 20, fontSize: '0.64rem', fontFamily: theme.typography.fontFamilyMonospace, borderColor: 'divider', color: 'text.disabled' }} />
+                  {documentMeta.repaired && (
+                    <Chip size="small" variant="outlined" label="schema repaired" sx={{ height: 20, fontSize: '0.64rem', fontFamily: theme.typography.fontFamilyMonospace, borderColor: 'rgba(217, 119, 6, 0.15)', color: 'rgba(217, 119, 6, 0.50)' }} />
+                  )}
+                </Stack>
+              )}
+
+              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                {Object.entries(breakdownCounts).map(([status, count]) => (
+                  <Chip key={status} size="small" label={`${status}: ${count}`} sx={{ height: 22, fontSize: '0.70rem', fontFamily: theme.typography.fontFamilyMonospace, backgroundColor: purpleBgSubtle, color: purpleAccent }} />
+                ))}
+              </Stack>
+            </Stack>
+          </Box>
+
+          <Divider sx={{ borderColor: 'divider' }} />
+
+          <Box sx={{ px: 3, py: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.25 }}>
+              {primaryTableTitle}
+            </Typography>
+            {documentType === 'rtm' ? (
+              <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Trace ID</TableCell>
+                      <TableCell>Req ID</TableCell>
+                      <TableCell>Requirement</TableCell>
+                      <TableCell>Coverage</TableCell>
+                      <TableCell>Test Ref(s)</TableCell>
+                      <TableCell>Conditions</TableCell>
+                      <TableCell>Level</TableCell>
+                      <TableCell>Owner</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {rows.map((row) => {
+                      const item = reqMap.get(row.requirementId)
+                      return (
+                        <TableRow key={row.traceId}>
+                          <TableCell sx={{ fontFamily: theme.typography.fontFamilyMonospace, fontSize: '0.78rem' }}>{row.traceId}</TableCell>
+                          <TableCell sx={{ fontFamily: theme.typography.fontFamilyMonospace, fontSize: '0.78rem' }}>{row.requirementId}</TableCell>
+                          <TableCell sx={{ fontSize: '0.80rem' }}>{item ? item.requirementText : ''}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.coverageStatus}</TableCell>
+                          <TableCell sx={{ fontSize: '0.76rem', whiteSpace: 'pre-line' }}>{Array.isArray(row.testCaseRefs) ? row.testCaseRefs.join('\n') : ''}</TableCell>
+                          <TableCell sx={{ fontSize: '0.76rem', whiteSpace: 'pre-line' }}>{joinLines(row.proposedTestConditions)}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.testLevel}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.owner || 'QA'}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : documentType === 'coverage-gap-analysis' ? (
+              <Stack spacing={2}>
+                <Grid container spacing={1.25}>
+                  {gapGroups.map((group) => (
+                    <Grid item xs={6} sm={3} key={group.status}>
+                      <Box
+                        sx={{
+                          px: 1.5,
+                          py: 1.25,
+                          borderRadius: 2,
+                          border: '1px solid',
+                          borderColor: group.config.border,
+                          backgroundColor: group.config.bg,
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ display: 'block', color: group.config.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {group.config.label}
+                        </Typography>
+                        <Typography variant="h6" sx={{ mt: 0.25, fontWeight: 700, color: 'text.primary' }}>
+                          {group.items.length}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+
+                {gapGroups.map((group) => (
+                  <Accordion
+                    key={group.status}
+                    defaultExpanded={group.status === 'major-gap' || group.status === 'partial-gap'}
+                    disableGutters
+                    sx={{
+                      backgroundColor: isDark ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.02)',
+                      border: '1px solid',
+                      borderColor: group.config.border,
+                      borderRadius: '10px !important',
+                      '&:before': { display: 'none' },
+                    }}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: 'text.disabled' }} />} sx={{ px: 2 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: group.config.color }}>
+                          {group.config.label}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={`${group.items.length} item${group.items.length === 1 ? '' : 's'}`}
+                          sx={{
+                            height: 20,
+                            fontSize: '0.68rem',
+                            fontFamily: theme.typography.fontFamilyMonospace,
+                            backgroundColor: group.config.bg,
+                            color: group.config.color,
+                            border: '1px solid',
+                            borderColor: group.config.border,
+                          }}
+                        />
+                      </Stack>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ px: 2, pb: 2 }}>
+                      <Stack spacing={1.25}>
+                        {group.items.map((row) => {
+                          const item = reqMap.get(row.requirementId)
+                          return (
+                            <Box
+                              key={row.gapId}
+                              sx={{
+                                p: 1.5,
+                                borderRadius: 2,
+                                border: '1px solid',
+                                borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fff',
+                              }}
+                            >
+                              <Stack spacing={1}>
+                                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="center">
+                                  <Chip size="small" label={row.gapId} sx={{ height: 22, fontSize: '0.68rem', fontFamily: theme.typography.fontFamilyMonospace }} />
+                                  <Chip size="small" label={row.requirementId} sx={{ height: 22, fontSize: '0.68rem', fontFamily: theme.typography.fontFamilyMonospace }} />
+                                  <Chip size="small" label={row.gapCategory} sx={{ height: 22, fontSize: '0.68rem', backgroundColor: purpleBgSubtle, color: purpleAccent }} />
+                                  <Chip size="small" label={row.severity} sx={{ height: 22, fontSize: '0.68rem', backgroundColor: group.config.bg, color: group.config.color }} />
+                                  {item && item.priority && (
+                                    <Chip size="small" label={item.priority} sx={{ height: 22, fontSize: '0.68rem' }} />
+                                  )}
+                                </Stack>
+
+                                <Box>
+                                  <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Requirement
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ mt: 0.35, color: 'text.primary' }}>
+                                    {item ? item.requirementText : '(missing requirement text)'}
+                                  </Typography>
+                                </Box>
+
+                                <Box>
+                                  <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Observation
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ mt: 0.35, color: 'text.primary' }}>
+                                    {row.observation}
+                                  </Typography>
+                                </Box>
+
+                                {row.impact && (
+                                  <Box>
+                                    <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      Impact
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ mt: 0.35, color: 'text.secondary' }}>
+                                      {row.impact}
+                                    </Typography>
+                                  </Box>
+                                )}
+
+                                <Box>
+                                  <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Recommended Actions
+                                  </Typography>
+                                  <BulletList items={row.recommendedActions} sx={{ mt: 0.25 }} />
+                                </Box>
+
+                                {Array.isArray(row.notes) && row.notes.length > 0 && (
+                                  <Box>
+                                    <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                      Notes
+                                    </Typography>
+                                    <BulletList items={row.notes} sx={{ mt: 0.25 }} />
+                                  </Box>
+                                )}
+                              </Stack>
+                            </Box>
+                          )
+                        })}
+                      </Stack>
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
+              </Stack>
+            ) : documentType === 'acceptance-criteria-breakdown' ? (
+              <Stack spacing={1.25}>
+                {rows.map((row) => {
+                  const item = reqMap.get(row.requirementId)
+                  return (
+                    <Box
+                      key={row.criteriaId}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fff',
+                      }}
+                    >
+                      <Stack spacing={1}>
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap alignItems="center">
+                          <Chip size="small" label={row.criteriaId} sx={{ height: 22, fontSize: '0.68rem', fontFamily: theme.typography.fontFamilyMonospace }} />
+                          <Chip size="small" label={row.requirementId} sx={{ height: 22, fontSize: '0.68rem', fontFamily: theme.typography.fontFamilyMonospace }} />
+                          <Chip size="small" label={row.criteriaType} sx={{ height: 22, fontSize: '0.68rem', backgroundColor: purpleBgSubtle, color: purpleAccent }} />
+                          <Chip size="small" label={row.clarityStatus} sx={{ height: 22, fontSize: '0.68rem' }} />
+                          {item && item.priority && <Chip size="small" label={item.priority} sx={{ height: 22, fontSize: '0.68rem' }} />}
+                        </Stack>
+
+                        <Box>
+                          <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Requirement
+                          </Typography>
+                          <Typography variant="body2" sx={{ mt: 0.35, color: 'text.primary' }}>
+                            {item ? item.requirementText : '(missing requirement text)'}
+                          </Typography>
+                        </Box>
+
+                        <Box>
+                          <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Acceptance Criterion
+                          </Typography>
+                          <Typography variant="body2" sx={{ mt: 0.35, color: 'text.primary' }}>
+                            {row.criterion}
+                          </Typography>
+                        </Box>
+
+                        {Array.isArray(row.notes) && row.notes.length > 0 && (
+                          <Box>
+                            <Typography variant="caption" sx={{ color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              Notes
+                            </Typography>
+                            <BulletList items={row.notes} sx={{ mt: 0.25 }} />
+                          </Box>
+                        )}
+                      </Stack>
+                    </Box>
+                  )
+                })}
+              </Stack>
+            ) : (
+              <Stack spacing={2}>
+                <Grid container spacing={1.5}>
+                  {[
+                    { title: 'Introduction', body: documentResult.introduction, bg: isDark ? 'rgba(222, 235, 247, 0.10)' : 'rgba(222, 235, 247, 0.85)' },
+                    { title: 'In Scope', body: Array.isArray(documentResult.inScope) ? documentResult.inScope.join('\n') : '', bg: isDark ? 'rgba(252, 228, 214, 0.10)' : 'rgba(252, 228, 214, 0.85)' },
+                    { title: 'Out of Scope', body: Array.isArray(documentResult.outOfScope) ? documentResult.outOfScope.join('\n') : '', bg: isDark ? 'rgba(226, 239, 218, 0.10)' : 'rgba(226, 239, 218, 0.85)' },
+                    { title: 'Risks', body: Array.isArray(documentResult.risks) ? documentResult.risks.join('\n') : '', bg: isDark ? 'rgba(234, 209, 220, 0.10)' : 'rgba(234, 209, 220, 0.85)' },
+                    { title: 'Resources', body: `Testers - ${(documentResult.resources?.testers || []).join(', ')}\nDevelopers - ${(documentResult.resources?.developers || []).join(', ')}`, bg: isDark ? 'rgba(235, 241, 221, 0.10)' : 'rgba(235, 241, 221, 0.85)' },
+                    { title: 'Environment and Tools', body: `Test Environment - ${documentResult.environmentAndTools?.testEnvironment || ''}\nTools - ${(documentResult.environmentAndTools?.tools || []).join(', ')}`, bg: isDark ? 'rgba(217, 217, 243, 0.10)' : 'rgba(217, 217, 243, 0.85)' },
+                    { title: 'Assumptions', body: Array.isArray(documentResult.assumptions) ? documentResult.assumptions.join('\n') : '', bg: isDark ? 'rgba(234, 209, 220, 0.10)' : 'rgba(234, 209, 220, 0.85)' },
+                    { title: 'Timescales', body: Array.isArray(documentResult.timescales) ? documentResult.timescales.join('\n') : '', bg: isDark ? 'rgba(235, 241, 221, 0.10)' : 'rgba(235, 241, 221, 0.85)' },
+                    { title: 'Missing Info Questions', body: Array.isArray(documentResult.missingInfoQuestions) ? documentResult.missingInfoQuestions.join('\n') : '', bg: isDark ? 'rgba(217, 217, 243, 0.10)' : 'rgba(217, 217, 243, 0.85)' },
+                  ].map((section) => (
+                    <Grid item xs={12} md={4} key={section.title}>
+                      <Box sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', backgroundColor: section.bg, minHeight: 120 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>{section.title}</Typography>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-line', color: 'text.primary' }}>{section.body || '(none)'}</Typography>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+
+                <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Features to be Tested</TableCell>
+                        <TableCell>Jira Ticket</TableCell>
+                        <TableCell>Test Objective</TableCell>
+                        <TableCell>Priority</TableCell>
+                        <TableCell>Test Status</TableCell>
+                        <TableCell>Test Cases</TableCell>
+                        <TableCell>Defect IDs</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {rows.map((row, idx) => (
+                        <TableRow key={`${row.feature}-${idx}`}>
+                          <TableCell sx={{ fontSize: '0.80rem' }}>{row.feature}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.jiraTicket}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.testObjective}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.priority}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.testStatus}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.testCases}</TableCell>
+                          <TableCell sx={{ fontSize: '0.78rem' }}>{row.defectIds}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Stack>
+            )}
+          </Box>
+
+          <Box sx={{ px: 3, pb: 3 }}>
+            <Stack spacing={1.5}>
+              {[
+                { key: 'missing', label: 'Missing Info Questions', content: <BulletList items={listOrNone(documentResult.missingInfoQuestions)} /> },
+                { key: 'assumptions', label: 'Assumptions', content: <BulletList items={listOrNone(documentResult.assumptions)} /> },
+                { key: 'risks', label: 'Risks', content: <BulletList items={listOrNone(documentResult.risks)} /> }
+              ].map((card) => (
+                <Accordion
+                  key={card.key}
+                  disableGutters
+                  sx={{
+                    backgroundColor: isDark ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.02)',
+                    border: '1px solid',
+                    borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)',
+                    borderRadius: '8px !important',
+                    '&:before': { display: 'none' },
+                  }}
+                >
+                  <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: 'text.disabled' }} />} sx={{ px: 2, '& .MuiAccordionSummary-content': { my: 0.75 } }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem', color: 'text.secondary' }}>{card.label}</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 2, pb: 1.5 }}>
+                    {card.content}
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Stack>
+          </Box>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card sx={{ overflow: 'visible', borderColor: purpleBorder }}>
       <CardContent sx={{ p: '0 !important' }}>

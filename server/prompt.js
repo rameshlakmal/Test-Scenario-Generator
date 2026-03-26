@@ -23,6 +23,56 @@ function buildPreflightSystemPrompt() {
   ].join(" \n");
 }
 
+function buildRtmSystemPrompt() {
+  return [
+    "You are a senior QA engineer specializing in QA document authoring and requirements traceability.",
+    "You generate a high-quality Requirements Traceability Matrix (RTM) from software requirements and clarifications.",
+    "You MUST output strictly valid JSON only (no markdown, no commentary).",
+    "Your entire response must be a single JSON object: it must start with '{' and end with '}'.",
+    "Use the provided RTM artifact template markdown as the document design guide.",
+    "Preserve requirement intent faithfully. Do not invent product behavior that is not implied by the requirement or user clarifications.",
+    "If information needed for a credible RTM is missing, record it in assumptions and missingInfoQuestions instead of pretending certainty."
+  ].join("\n");
+}
+
+function buildCoverageGapSystemPrompt() {
+  return [
+    "You are a senior QA engineer specializing in requirement review, testability analysis, and QA document authoring.",
+    "You generate a high-quality Coverage Gap Analysis document from software requirements and clarifications.",
+    "You MUST output strictly valid JSON only (no markdown, no commentary).",
+    "Your entire response must be a single JSON object: it must start with '{' and end with '}'.",
+    "Use the provided Coverage Gap Analysis artifact template markdown as the document design guide.",
+    "Preserve requirement intent faithfully. Do not invent product behavior that is not implied by the requirement or user clarifications.",
+    "Your job is to identify what is missing, weak, ambiguous, or not yet testable in the requirement.",
+    "If information needed for a credible gap analysis is missing, record it in assumptions and missingInfoQuestions instead of pretending certainty."
+  ].join("\n");
+}
+
+function buildAcceptanceCriteriaSystemPrompt() {
+  return [
+    "You are a senior QA engineer and business analyst specializing in acceptance criteria authoring.",
+    "You generate a high-quality Acceptance Criteria Breakdown document from software requirements and clarifications.",
+    "You MUST output strictly valid JSON only (no markdown, no commentary).",
+    "Your entire response must be a single JSON object: it must start with '{' and end with '}'.",
+    "Use the provided Acceptance Criteria Breakdown artifact template markdown as the document design guide.",
+    "Preserve requirement intent faithfully. Do not invent product behavior that is not implied by the requirement or user clarifications.",
+    "Break broad or compound statements into atomic, testable acceptance criteria.",
+    "If information needed for clear acceptance criteria is missing, record it in assumptions and missingInfoQuestions instead of pretending certainty."
+  ].join("\n");
+}
+
+function buildTestPlanDraftSystemPrompt() {
+  return [
+    "You are a senior QA lead specializing in concise sprint-level test plan drafting.",
+    "You generate a practical Test Plan Draft from software requirements, clarifications, and user-provided project context.",
+    "You MUST output strictly valid JSON only (no markdown, no commentary).",
+    "Your entire response must be a single JSON object: it must start with '{' and end with '}'.",
+    "Preserve requirement intent faithfully. Do not invent project facts that are not implied by the requirement or provided context.",
+    "Use the user's provided project context where available. If context is missing, use assumptions and missingInfoQuestions instead of pretending certainty.",
+    "Keep the plan compact, sprint-friendly, and aligned with a QA-owned working document."
+  ].join("\n");
+}
+
 function buildAnalysisSystemPrompt() {
   return [
     "You are a senior QA engineer and test architect.",
@@ -186,6 +236,112 @@ function buildPreflightUserPrompt(input) {
   ].join("\n");
 }
 
+function buildRtmUserPrompt(input) {
+  return [
+    "Return a single JSON object that matches the required schema.",
+    "Follow the artifact template closely when shaping the RTM.",
+    "Keep summaries concise and concrete.",
+    "Use requirementSource values to show where each item came from: requirement-text, clarification, or inferred-structure.",
+    "Use coverageStatus values only from: covered, partial, missing, not-applicable.",
+    "Use testLevel values only from: unit, integration, system, uat, regression, non-functional, not-specified.",
+    "Use priority values only from: P0, P1, P2, P3.",
+    "When an exact test case ID does not yet exist, create a stable placeholder like TBD-TC-001.",
+    "Do not include any keys that are not in the schema.",
+    "",
+    "ARTIFACT TEMPLATE (markdown design guide):",
+    input.templateMarkdown,
+    "",
+    "REQUIREMENTS (user provided):",
+    input.requirements,
+    "",
+    input.clarifications
+      ? "CLARIFICATIONS (user answers to follow-up questions):\n" + input.clarifications + "\n"
+      : "",
+    "REQUIRED JSON SCHEMA (informal):",
+    input.schemaHint
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildCoverageGapUserPrompt(input) {
+  return [
+    "Return a single JSON object that matches the required schema.",
+    "Follow the artifact template closely when shaping the document.",
+    "Keep summaries concise and concrete.",
+    "Use requirementSource values to show where each item came from: requirement-text, clarification, or inferred-structure.",
+    "Use gapStatus values only from: clear, partial-gap, major-gap, not-testable.",
+    "Use gapCategory values only from: ambiguity, missing-validation, missing-negative-path, missing-boundary, missing-error-handling, missing-integration-detail, missing-data-rule, missing-permission-rule, missing-non-functional-detail, testability, other.",
+    "Use severity values only from: critical, high, medium, low.",
+    "Do not include any keys that are not in the schema.",
+    "",
+    "ARTIFACT TEMPLATE (markdown design guide):",
+    input.templateMarkdown,
+    "",
+    "REQUIREMENTS (user provided):",
+    input.requirements,
+    "",
+    input.clarifications
+      ? "CLARIFICATIONS (user answers to follow-up questions):\n" + input.clarifications + "\n"
+      : "",
+    "REQUIRED JSON SCHEMA (informal):",
+    input.schemaHint
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildAcceptanceCriteriaUserPrompt(input) {
+  return [
+    "Return a single JSON object that matches the required schema.",
+    "Follow the artifact template closely when shaping the document.",
+    "Keep criteria atomic, testable, and concise.",
+    "Use requirementSource values to show where each item came from: requirement-text, clarification, or inferred-structure.",
+    "Use criteriaType values only from: functional, validation, business-rule, workflow, integration, permission, data, non-functional, other.",
+    "Use clarityStatus values only from: clear, needs-clarification, assumed.",
+    "Do not include any keys that are not in the schema.",
+    "",
+    "ARTIFACT TEMPLATE (markdown design guide):",
+    input.templateMarkdown,
+    "",
+    "REQUIREMENTS (user provided):",
+    input.requirements,
+    "",
+    input.clarifications
+      ? "CLARIFICATIONS (user answers to follow-up questions):\n" + input.clarifications + "\n"
+      : "",
+    "REQUIRED JSON SCHEMA (informal):",
+    input.schemaHint
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildTestPlanDraftUserPrompt(input) {
+  return [
+    "Return a single JSON object that matches the required schema.",
+    "Shape the output like a compact sprint test plan with sectioned blocks plus a features-to-be-tested table.",
+    "Keep all sections concise and practical.",
+    "Use project context where provided; if a field is missing, keep it minimal and surface assumptions instead of making up specifics.",
+    "Use featureRows[].priority only from: P0, P1, P2, P3, or empty string.",
+    "Do not include any keys that are not in the schema.",
+    "",
+    "PROJECT CONTEXT (user provided):",
+    input.projectContext,
+    "",
+    "REQUIREMENTS (user provided):",
+    input.requirements,
+    "",
+    input.clarifications
+      ? "CLARIFICATIONS (user answers to follow-up questions):\n" + input.clarifications + "\n"
+      : "",
+    "REQUIRED JSON SCHEMA (informal):",
+    input.schemaHint
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function schemaHintText(opts) {
   const includeDiagram = opts && opts.includeDiagram;
   const lines = [
@@ -213,6 +369,141 @@ function schemaHintText(opts) {
   return lines.join("\n");
 }
 
+function rtmSchemaHintText() {
+  return [
+    "{",
+    "  documentTitle: string,",
+    "  projectName: string,",
+    "  sourceSummary: string,",
+    "  assumptions: string[],",
+    "  risks: string[],",
+    "  missingInfoQuestions: string[],",
+    "  requirementItems: [",
+    "    {",
+    "      requirementId: string,",
+    "      requirementText: string,",
+    "      category: functional|business-rule|validation|integration|reporting|security|performance|usability|accessibility|data|workflow|non-functional|other,",
+    "      priority: P0|P1|P2|P3,",
+    "      requirementSource: requirement-text|clarification|inferred-structure,",
+    "      acceptanceNotes: string[]",
+    "    }",
+    "  ],",
+    "  traceRows: [",
+    "    {",
+    "      traceId: string,",
+    "      requirementId: string,",
+    "      coverageStatus: covered|partial|missing|not-applicable,",
+    "      testCaseRefs: string[],",
+    "      proposedTestConditions: string[],",
+    "      testLevel: unit|integration|system|uat|regression|non-functional|not-specified,",
+    "      owner: string,",
+    "      notes: string[]",
+    "    }",
+    "  ]",
+    "}"
+  ].join("\n");
+}
+
+function coverageGapSchemaHintText() {
+  return [
+    "{",
+    "  documentTitle: string,",
+    "  projectName: string,",
+    "  sourceSummary: string,",
+    "  assumptions: string[],",
+    "  risks: string[],",
+    "  missingInfoQuestions: string[],",
+    "  requirementItems: [",
+    "    {",
+    "      requirementId: string,",
+    "      requirementText: string,",
+    "      category: functional|business-rule|validation|integration|reporting|security|performance|usability|accessibility|data|workflow|non-functional|other,",
+    "      priority: P0|P1|P2|P3,",
+    "      requirementSource: requirement-text|clarification|inferred-structure,",
+    "      acceptanceNotes: string[]",
+    "    }",
+    "  ],",
+    "  gapRows: [",
+    "    {",
+    "      gapId: string,",
+    "      requirementId: string,",
+    "      gapStatus: clear|partial-gap|major-gap|not-testable,",
+    "      gapCategory: ambiguity|missing-validation|missing-negative-path|missing-boundary|missing-error-handling|missing-integration-detail|missing-data-rule|missing-permission-rule|missing-non-functional-detail|testability|other,",
+    "      severity: critical|high|medium|low,",
+    "      observation: string,",
+    "      impact: string,",
+    "      recommendedActions: string[],",
+    "      notes: string[]",
+    "    }",
+    "  ]",
+    "}"
+  ].join("\n");
+}
+
+function acceptanceCriteriaSchemaHintText() {
+  return [
+    "{",
+    "  documentTitle: string,",
+    "  projectName: string,",
+    "  sourceSummary: string,",
+    "  assumptions: string[],",
+    "  risks: string[],",
+    "  missingInfoQuestions: string[],",
+    "  requirementItems: [",
+    "    {",
+    "      requirementId: string,",
+    "      requirementText: string,",
+    "      category: functional|business-rule|validation|integration|reporting|security|performance|usability|accessibility|data|workflow|non-functional|other,",
+    "      priority: P0|P1|P2|P3,",
+    "      requirementSource: requirement-text|clarification|inferred-structure,",
+    "      acceptanceNotes: string[]",
+    "    }",
+    "  ],",
+    "  criteriaRows: [",
+    "    {",
+    "      criteriaId: string,",
+    "      requirementId: string,",
+    "      criterion: string,",
+    "      criteriaType: functional|validation|business-rule|workflow|integration|permission|data|non-functional|other,",
+    "      clarityStatus: clear|needs-clarification|assumed,",
+    "      notes: string[]",
+    "    }",
+    "  ]",
+    "}"
+  ].join("\n");
+}
+
+function testPlanDraftSchemaHintText() {
+  return [
+    "{",
+    "  documentTitle: string,",
+    "  sprintName: string,",
+    "  author: string,",
+    "  sourceSummary: string,",
+    "  introduction: string,",
+    "  inScope: string[],",
+    "  outOfScope: string[],",
+    "  risks: string[],",
+    "  resources: { testers: string[], developers: string[] },",
+    "  environmentAndTools: { testEnvironment: string, tools: string[] },",
+    "  assumptions: string[],",
+    "  timescales: string[],",
+    "  missingInfoQuestions: string[],",
+    "  featureRows: [",
+    "    {",
+    "      feature: string,",
+    "      jiraTicket: string,",
+    "      testObjective: string,",
+    "      priority: P0|P1|P2|P3|'' ,",
+    "      testStatus: string,",
+    "      testCases: string,",
+    "      defectIds: string",
+    "    }",
+    "  ]",
+    "}"
+  ].join("\n");
+}
+
 function analysisSchemaHintText() {
   return [
     "{",
@@ -231,12 +522,24 @@ function analysisSchemaHintText() {
 module.exports = {
   buildSystemPrompt,
   buildPreflightSystemPrompt,
+  buildRtmSystemPrompt,
+  buildCoverageGapSystemPrompt,
+  buildAcceptanceCriteriaSystemPrompt,
+  buildTestPlanDraftSystemPrompt,
   buildAnalysisSystemPrompt,
   buildAnalysisUserPrompt,
   buildSkillGenerationSystemPrompt,
   buildSkillGenerationUserPrompt,
   buildUserPrompt,
   buildPreflightUserPrompt,
+  buildRtmUserPrompt,
+  buildCoverageGapUserPrompt,
+  buildAcceptanceCriteriaUserPrompt,
+  buildTestPlanDraftUserPrompt,
   schemaHintText,
+  rtmSchemaHintText,
+  coverageGapSchemaHintText,
+  acceptanceCriteriaSchemaHintText,
+  testPlanDraftSchemaHintText,
   analysisSchemaHintText
 };
